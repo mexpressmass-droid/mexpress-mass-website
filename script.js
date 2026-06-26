@@ -1,20 +1,13 @@
-const menuToggle = document.getElementById("menuToggle");
-const mainNav = document.getElementById("mainNav");
+const menu = document.getElementById("menu");
+const nav = document.getElementById("nav");
+menu?.addEventListener("click", () => nav.classList.toggle("open"));
 
-menuToggle?.addEventListener("click", () => {
-  const isOpen = mainNav.classList.toggle("open");
-  menuToggle.setAttribute("aria-expanded", String(isOpen));
-});
-
-document.querySelectorAll(".nav a").forEach((link) => {
-  link.addEventListener("click", () => {
-    mainNav.classList.remove("open");
-    menuToggle?.setAttribute("aria-expanded", "false");
-  });
+document.querySelectorAll(".nav a").forEach(link => {
+  link.addEventListener("click", () => nav.classList.remove("open"));
 });
 
 const form = document.getElementById("rideForm");
-const note = document.getElementById("formNote");
+const note = document.getElementById("note");
 
 form?.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -25,17 +18,14 @@ form?.addEventListener("submit", (event) => {
     "",
     `Full Name: ${data.get("name")}`,
     `Phone: ${data.get("phone")}`,
-    `Pick-Up Address: ${data.get("pickup")}`,
-    `Drop-Off Address: ${data.get("dropoff")}`,
+    `Pickup Address: ${data.get("pickup")}`,
+    `Drop-off Address: ${data.get("dropoff")}`,
     `Date: ${data.get("date")}`,
     `Time: ${data.get("time")}`,
     `Mobility Type: ${data.get("mobility")}`,
-    `Additional Details: ${data.get("details") || "N/A"}`
+    `Details: ${data.get("details") || "N/A"}`
   ].join("\n");
 
-  const subject = encodeURIComponent("New Ride Request");
-  const body = encodeURIComponent(message);
-
-  window.location.href = `mailto:info@mexpress-mass.com?subject=${subject}&body=${body}`;
+  window.location.href = `mailto:info@mexpress-mass.com?subject=${encodeURIComponent("New Ride Request")}&body=${encodeURIComponent(message)}`;
   note.textContent = "Your email app should open with the ride request details.";
 });
