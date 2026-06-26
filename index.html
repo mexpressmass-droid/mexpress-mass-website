@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>M Express Transportation | Premium Medical Transportation in Massachusetts</title>
-  <meta name="description" content="M Express Transportation provides safe, reliable non-emergency medical transportation in Massachusetts. Wheelchair transportation, ambulatory rides, medical appointments, rehab, hospital discharge and long-distance trips." />
+  <title>M Express Transportation | Non-Emergency Medical Transportation Massachusetts</title>
+  <meta name="description" content="M Express Transportation provides safe, reliable and compassionate non-emergency medical transportation throughout Massachusetts. Wheelchair accessible vans, medical appointments, hospital discharge and long distance rides." />
   <meta name="theme-color" content="#071b33" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,13 +12,10 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="header">
-    <a href="#home" class="brand">
-      <span class="brand-mark">M</span>
-      <span>
-        <strong>M Express</strong>
-        <small>Transportation</small>
-      </span>
+  <header class="topbar">
+    <a class="logo" href="#home" aria-label="M Express Transportation">
+      <span class="logo-main">M<span>EX</span>PRESS</span>
+      <small>TRANSPORTATION</small>
     </a>
 
     <button class="menu" id="menu" aria-label="Open menu">
@@ -26,186 +23,163 @@
     </button>
 
     <nav class="nav" id="nav">
+      <a class="active" href="#home">Home</a>
+      <a href="#about">About Us</a>
       <a href="#services">Services</a>
-      <a href="#fleet">Fleet</a>
-      <a href="#providers">Providers</a>
-      <a href="#area">Service Area</a>
-      <a href="#request">Book Ride</a>
+      <a href="#fleet">Our Fleet</a>
+      <a href="#areas">Areas We Serve</a>
+      <a href="#faq">FAQ</a>
+      <a href="#contact">Contact</a>
     </nav>
 
-    <a class="phone" href="tel:+16175550123">Call Now</a>
+    <a class="call-box" href="tel:+16175550123">
+      <span>☎</span>
+      <strong>(617) 555-0123</strong>
+      <small>Call us 24/7</small>
+    </a>
   </header>
 
   <main id="home">
     <section class="hero">
+      <div class="hero-bg"></div>
       <div class="hero-copy">
-        <p class="tag">Massachusetts Medical Transportation</p>
-        <h1>Reliable rides for people who need care.</h1>
-        <p class="lead">
-          Premium non-emergency medical transportation for wheelchair and ambulatory passengers
-          across Massachusetts — built for patients, families, hospitals and care teams.
-        </p>
-
-        <div class="actions">
-          <a class="btn primary" href="#request">Book a Ride</a>
-          <a class="btn secondary" href="tel:+16175550123">(617) 555-0123</a>
+        <h1>Safe, Reliable &<br><span>Compassionate</span><br>Transportation</h1>
+        <p>Specializing in Non-Emergency Medical Transportation throughout Massachusetts.</p>
+        <div class="hero-actions">
+          <a class="btn red" href="tel:+16175550123">☎ Call Now</a>
+          <a class="btn navy" href="#book">▣ Book a Ride</a>
         </div>
 
-        <div class="trust">
-          <div><strong>ADA</strong><span>Accessible Vehicles</span></div>
-          <div><strong>24/7</strong><span>Ride Requests</span></div>
-          <div><strong>MA</strong><span>Serving Massachusetts</span></div>
-        </div>
-      </div>
-
-      <div class="hero-card">
-        <div class="glass-card">
-          <span>Wheelchair Accessible</span>
-          <strong>BraunAbility Dodge Grand Caravan</strong>
-        </div>
-        <div class="hospital">H</div>
-        <div class="road"></div>
-        <div class="van">
-          <div class="win a"></div>
-          <div class="win b"></div>
-          <div class="win c"></div>
-          <div class="door"></div>
-          <div class="front"></div>
-          <div class="wheel l"></div>
-          <div class="wheel r"></div>
-          <div class="ramp"></div>
+        <div class="badges">
+          <div><span>🛡</span><strong>Fully Licensed<br>& Insured</strong></div>
+          <div><span>👥</span><strong>Professional<br>Drivers</strong></div>
+          <div><span>24</span><strong>24/7<br>Availability</strong></div>
         </div>
       </div>
     </section>
 
-    <section class="logo-strip">
-      <p>Built for</p>
-      <span>Patients</span>
-      <span>Families</span>
-      <span>Hospitals</span>
-      <span>Rehab Centers</span>
-      <span>Care Coordinators</span>
-    </section>
-
-    <section class="section services" id="services">
-      <div class="section-title">
-        <p class="tag">Services</p>
-        <h2>Transportation for every step of care.</h2>
-        <p>Professional medical rides with comfort, safety and communication at the center of every trip.</p>
-      </div>
-
-      <div class="cards">
-        <article>
-          <span>♿</span>
-          <h3>Wheelchair Transportation</h3>
-          <p>Accessible vans with ramps and wheelchair securement systems.</p>
-        </article>
-        <article>
-          <span>🚶</span>
-          <h3>Ambulatory Rides</h3>
-          <p>Comfortable transportation for passengers who walk independently or with assistance.</p>
-        </article>
-        <article>
-          <span>🏥</span>
-          <h3>Hospital Discharge</h3>
-          <p>Safe rides from hospitals, rehab centers and skilled nursing facilities.</p>
-        </article>
-        <article>
-          <span>📅</span>
-          <h3>Medical Appointments</h3>
-          <p>Reliable trips to doctor visits, dialysis, therapy and follow-up care.</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="section split">
-      <div>
-        <p class="tag">Why M Express</p>
-        <h2>A transportation partner you can trust.</h2>
-        <p>
-          Medical transportation is not just a ride. It requires patience, timing, communication and
-          a clean, accessible vehicle. We make every trip feel safe, respectful and professional.
-        </p>
-      </div>
-
-      <div class="checklist">
-        <p>✓ Clean, comfortable wheelchair-accessible vehicles</p>
-        <p>✓ Professional, respectful drivers</p>
-        <p>✓ Clear communication before every ride</p>
-        <p>✓ Service for patients, families and providers</p>
-        <p>✓ Long-distance medical transportation available</p>
-      </div>
-    </section>
-
-    <section class="section fleet" id="fleet">
-      <div class="section-title left">
-        <p class="tag">Fleet</p>
-        <h2>Accessible vans made for safe transportation.</h2>
-        <p>Our first spotlight vehicle: BraunAbility Dodge Grand Caravan. Real fleet photos can be added next.</p>
-      </div>
-
-      <div class="fleet-showcase">
-        <div class="fleet-visual">
-          <div class="mini-van"></div>
+    <section class="fleet-band" id="fleet">
+      <div class="fleet-head">
+        <div>
+          <h2>Our Fleet</h2>
+          <i></i>
         </div>
-        <div class="fleet-info">
-          <h3>BraunAbility Dodge Grand Caravan</h3>
-          <p>Wheelchair-accessible van with ramp entry, securement system and a comfortable passenger area.</p>
-          <div class="specs">
-            <span>Wheelchair Accessible</span>
-            <span>Ramp Entry</span>
-            <span>Passenger Friendly</span>
-            <span>Medical Transportation</span>
+        <p>Modern, comfortable and wheelchair accessible vehicles to meet your transportation needs.</p>
+      </div>
+
+      <div class="fleet-cards">
+        <article>
+          <img src="assets/fleet-1.jpg" alt="Dodge Grand Caravan BraunAbility wheelchair accessible van">
+          <div class="fleet-card-body">
+            <h3>Dodge Grand Caravan</h3>
+            <strong>BraunAbility</strong>
+            <div class="meta"><span>▣ 2014</span><span>♿ Wheelchair</span></div>
           </div>
-        </div>
+        </article>
+
+        <article>
+          <img src="assets/fleet-2.jpg" alt="Dodge Grand Caravan BraunAbility medical transportation van">
+          <div class="fleet-card-body">
+            <h3>Dodge Grand Caravan</h3>
+            <strong>BraunAbility</strong>
+            <div class="meta"><span>▣ Up to 5</span><span>♿ Wheelchair</span></div>
+          </div>
+        </article>
+
+        <article>
+          <img src="assets/fleet-4.jpg" alt="Red Chrysler Town and Country medical transportation van">
+          <div class="fleet-card-body">
+            <h3>Chrysler Town & Country</h3>
+            <strong>Wheelchair Accessible</strong>
+            <div class="meta"><span>▣ Up to 5</span><span>♿ Wheelchair</span></div>
+          </div>
+        </article>
+
+        <article>
+          <img src="assets/fleet-5.jpg" alt="Red Dodge Grand Caravan wheelchair ramp deployed">
+          <div class="fleet-card-body">
+            <h3>Dodge Grand Caravan</h3>
+            <strong>BraunAbility</strong>
+            <div class="meta"><span>▣ Ramp Entry</span><span>♿ Wheelchair</span></div>
+          </div>
+        </article>
+
+        <article>
+          <img src="assets/fleet-7.jpg" alt="White Dodge Grand Caravan wheelchair accessible van">
+          <div class="fleet-card-body">
+            <h3>Dodge Grand Caravan</h3>
+            <strong>BraunAbility</strong>
+            <div class="meta"><span>▣ Clean Fleet</span><span>♿ Wheelchair</span></div>
+          </div>
+        </article>
       </div>
     </section>
 
-    <section class="providers" id="providers">
+    <section class="features" id="services">
+      <div class="service-card">
+        <span class="shield">✚</span>
+        <h3>Medical Transportation</h3>
+        <p>We provide safe and reliable non-emergency medical transportation to hospitals, clinics, dialysis centers and medical appointments.</p>
+      </div>
+
+      <div class="feature">
+        <span>♿</span>
+        <h3>Wheelchair Accessible</h3>
+        <p>All wheelchair vehicles are equipped with secure ramp systems and safe wheelchair access.</p>
+      </div>
+
+      <div class="feature">
+        <span>◷</span>
+        <h3>On Time, Every Time</h3>
+        <p>We value your time and provide reliable pickups and on-time arrivals for every trip.</p>
+      </div>
+
+      <div class="feature">
+        <span>▰</span>
+        <h3>Comfortable Rides</h3>
+        <p>Clean, comfortable and well-maintained vehicles for a smooth and pleasant ride.</p>
+      </div>
+
+      <div class="feature">
+        <span>●</span>
+        <h3>Serving All Massachusetts</h3>
+        <p>Proudly serving Boston and surrounding areas across Massachusetts.</p>
+      </div>
+
+      <div class="care-card">
+        <span>♥</span>
+        <h3>Compassionate Care</h3>
+        <p>Our drivers are trained to provide the highest level of care and respect for every passenger.</p>
+      </div>
+    </section>
+
+    <section class="about" id="about">
       <div>
-        <p class="tag">For Providers</p>
-        <h2>Reliable support for healthcare teams.</h2>
-        <p>
-          We help hospitals, clinics, rehab centers and case managers coordinate dependable transportation
-          for patients who need extra care on the road.
-        </p>
+        <p class="label">Why Choose Us</p>
+        <h2>Transportation built around safety, dignity and trust.</h2>
+        <p>M Express Transportation helps patients, families and healthcare teams coordinate dependable rides with wheelchair-accessible vehicles and professional drivers.</p>
       </div>
-      <div class="provider-card">
-        <p>✓ Hospital discharge</p>
-        <p>✓ Recurring appointment rides</p>
-        <p>✓ Wheelchair-accessible service</p>
-        <p>✓ Professional dispatch communication</p>
+      <div class="about-list">
+        <p>✓ Wheelchair and ambulatory transportation</p>
+        <p>✓ Hospital discharge and rehab transportation</p>
+        <p>✓ Medical appointments, dialysis and therapy</p>
+        <p>✓ Local and long-distance medical rides</p>
       </div>
     </section>
 
-    <section class="section area" id="area">
-      <div class="section-title">
-        <p class="tag">Service Area</p>
-        <h2>Serving Massachusetts and beyond.</h2>
-        <p>Based in Massachusetts and available for local and long-distance medical transportation.</p>
-      </div>
-
-      <div class="cities">
-        <span>Boston</span>
-        <span>Cambridge</span>
-        <span>Brookline</span>
-        <span>Newton</span>
-        <span>Waltham</span>
-        <span>Woburn</span>
-        <span>Lowell</span>
-        <span>Lawrence</span>
-        <span>Worcester</span>
-        <span>Providence trips</span>
-        <span>New York trips</span>
-        <span>Long Distance</span>
+    <section class="areas" id="areas">
+      <p class="label">Areas We Serve</p>
+      <h2>Serving Massachusetts</h2>
+      <div class="chips">
+        <span>Boston</span><span>Cambridge</span><span>Brookline</span><span>Newton</span><span>Waltham</span><span>Woburn</span><span>Lowell</span><span>Lawrence</span><span>Worcester</span><span>Long Distance Trips</span>
       </div>
     </section>
 
-    <section class="request" id="request">
-      <div class="request-copy">
-        <p class="tag">Book a Ride</p>
+    <section class="book" id="book">
+      <div class="book-copy">
+        <p class="label">Book a Ride</p>
         <h2>Request transportation today.</h2>
-        <p>Submit the details and our team will contact you to confirm availability.</p>
+        <p>Submit your ride details and our team will contact you to confirm availability.</p>
         <a class="btn light" href="tel:+16175550123">Call Now</a>
       </div>
 
@@ -229,32 +203,51 @@
           </label>
           <label class="full">Details<textarea name="details" placeholder="Appointment type, stairs, companion, special instructions"></textarea></label>
         </div>
-        <button class="btn primary submit" type="submit">Submit Request</button>
+        <button class="btn navy submit" type="submit">Submit Request</button>
         <p class="note" id="note">This form opens an email draft with the ride details.</p>
       </form>
     </section>
+
+    <section class="faq" id="faq">
+      <p class="label">FAQ</p>
+      <h2>Common Questions</h2>
+      <div class="faq-grid">
+        <details open>
+          <summary>Do you provide wheelchair transportation?</summary>
+          <p>Yes. We provide wheelchair-accessible transportation using ramp-equipped vehicles.</p>
+        </details>
+        <details>
+          <summary>Do you serve hospitals and rehab centers?</summary>
+          <p>Yes. We can help with appointments, hospital discharge, rehab transportation and recurring medical trips.</p>
+        </details>
+        <details>
+          <summary>How do I book a ride?</summary>
+          <p>You can call us or submit the online request form. We will contact you to confirm the trip details.</p>
+        </details>
+      </div>
+    </section>
   </main>
 
-  <footer class="footer">
+  <footer class="footer" id="contact">
     <div>
-      <a href="#home" class="brand footer-brand">
-        <span class="brand-mark">M</span>
-        <span><strong>M Express</strong><small>Transportation</small></span>
+      <a class="logo footer-logo" href="#home">
+        <span class="logo-main">M<span>EX</span>PRESS</span>
+        <small>TRANSPORTATION</small>
       </a>
-      <p>Safe, reliable and compassionate non-emergency medical transportation in Massachusetts.</p>
+      <p>Safe, reliable and compassionate non-emergency medical transportation throughout Massachusetts.</p>
     </div>
     <div>
       <h4>Contact</h4>
-      <p><a href="tel:+16175550123">(617) 555-0123</a></p>
-      <p><a href="mailto:info@mexpress-mass.com">info@mexpress-mass.com</a></p>
+      <a href="tel:+16175550123">(617) 555-0123</a>
+      <a href="mailto:info@mexpress-mass.com">info@mexpress-mass.com</a>
       <p>Massachusetts</p>
     </div>
     <div>
       <h4>Services</h4>
       <a href="#services">Wheelchair Transportation</a>
-      <a href="#services">Ambulatory Transportation</a>
+      <a href="#services">Medical Appointments</a>
       <a href="#services">Hospital Discharge</a>
-      <a href="#request">Book a Ride</a>
+      <a href="#book">Book a Ride</a>
     </div>
   </footer>
 
