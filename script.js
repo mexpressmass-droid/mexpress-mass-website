@@ -29,6 +29,6 @@ form?.addEventListener('submit', (event) => {
     `Details: ${data.get('details') || 'N/A'}`
   ].join('\n');
 
-  window.location.href = `mailto:info@mexpress-mass.com?subject=${encodeURIComponent('New Ride Request')}&body=${encodeURIComponent(message)}`;
+  window.location.href = `mailto:mexpress.mass@gmail.com?subject=${encodeURIComponent('New Ride Request')}&body=${encodeURIComponent(message)}`;
   note.textContent = 'Your email app should open with the ride request details.';
 });

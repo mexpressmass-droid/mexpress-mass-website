@@ -1,14 +1,10 @@
-M Express Transportation - Full Homepage
+M Express Transportation - Mockup Style Homepage
 
-Files:
+Upload/replace in GitHub:
 - index.html
 - styles.css
 - script.js
+- assets folder
 
-Before publishing:
-1. Replace phone number (617) 555-0123 with the real company phone.
-2. Replace info@mexpress-mass.com with the real company email.
-3. Later replace the illustrated vehicle with real photos.
-
-Cloudflare:
-Use the option for static assets / static files, not Worker code.
+Important:
+Upload the full assets folder with all images.
