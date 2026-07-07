@@ -3,21 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>M Express Mass | Wheelchair Transportation in Greater Boston</title>
-  <meta name="description" content="M Express Mass provides safe, reliable and compassionate wheelchair-accessible non-emergency medical transportation, door-to-door service, airport transportation, and private rides in Greater Boston." />
+  <title>M Express | Wheelchair Transportation in Greater Boston</title>
+  <meta name="description" content="M Express provides safe, reliable and compassionate wheelchair-accessible non-emergency medical transportation, door-to-door service, airport transportation, and private rides in Greater Boston." />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="site-header">
     <div class="container nav-wrap">
-      <a class="logo" href="#home">M Express <span>Mass</span></a>
+      <a class="logo" href="#home">M Express</a>
       <button class="nav-toggle" aria-label="Open menu">☰</button>
       <nav class="nav">
         <a href="#services">Services</a>
         <a href="#fleet">Fleet</a>
         <a href="#areas">Service Area</a>
         <a href="#faq">FAQ</a>
-        <a href="#contact" class="nav-cta">Book a Ride</a>
+        <a href="#booking" class="nav-cta" data-open-booking>Book a Ride</a>
       </nav>
     </div>
   </header>
@@ -28,10 +28,10 @@
         <div class="hero-copy">
           <p class="eyebrow">Greater Boston Wheelchair Transportation</p>
           <h1>Safe, reliable & compassionate transportation for every ride.</h1>
-          <p class="hero-text">M Express Mass provides wheelchair-accessible non-emergency medical transportation across Boston and nearby Massachusetts communities. Our vehicles are properly equipped, reliable, and operated with passenger comfort and safety in mind.</p>
+          <p class="hero-text">M Express provides wheelchair-accessible non-emergency medical transportation across Boston and nearby Massachusetts communities. Our vehicles are properly equipped, reliable, and operated with passenger comfort and safety in mind.</p>
           <div class="hero-actions">
-            <a class="btn primary" href="tel:+16172517049">Call 617-251-7049</a>
-            <a class="btn secondary" href="mailto:mexpress.mass@gmail.com">mexpress.mass@gmail.com</a>
+            <a class="btn primary" href="#booking" data-open-booking>Book a Ride</a>
+            <a class="btn secondary" href="tel:+16172517049">Call 617-251-7049</a>
           </div>
           <div class="trust-row">
             <span>Compassionate Care</span>
@@ -41,12 +41,74 @@
           </div>
         </div>
         <div class="hero-card">
-          <img src="assets/fleet/hero-fleet.jpg" alt="M Express Mass wheelchair accessible fleet" />
+          <img src="assets/fleet/hero-fleet.jpg" alt="M Express wheelchair accessible fleet" />
           <div class="quick-card">
             <strong>Need a ride?</strong>
             <p>Call or email us with pickup address, destination, appointment time, and wheelchair details.</p>
           </div>
         </div>
+      </div>
+    </section>
+
+
+    <section class="section booking" id="booking">
+      <div class="container booking-card">
+        <div class="booking-copy">
+          <p class="eyebrow">Online booking request</p>
+          <h2>Request a ride online</h2>
+          <p>Fill out the pickup, drop-off, date, time, and passenger details. Address fields include smart suggestions, and the request will be sent to M Express by email for confirmation.</p>
+          <div class="mini-note">For urgent or same-day rides, please call <a href="tel:+16172517049">617-251-7049</a>.</div>
+        </div>
+        <form class="ride-form" action="https://formsubmit.co/mexpress.mass@gmail.com" method="POST">
+          <input type="hidden" name="_subject" value="New ride request from M Express website">
+          <input type="hidden" name="_captcha" value="false">
+          <input type="hidden" name="_template" value="table">
+          <div class="form-grid">
+            <label>Passenger name
+              <input type="text" name="Passenger name" placeholder="Full name" required>
+            </label>
+            <label>Phone number
+              <input type="tel" name="Phone" placeholder="(617) 000-0000" required>
+            </label>
+            <label class="wide">Email address <span class="optional">optional</span>
+              <input type="email" name="Email" placeholder="email@example.com">
+            </label>
+            <label class="wide">Pickup address
+              <input class="address-input" type="text" name="Pickup address" placeholder="Start typing pickup address" list="address-suggestions" autocomplete="street-address" required>
+            </label>
+            <label class="wide">Drop-off address
+              <input class="address-input" type="text" name="Drop-off address" placeholder="Start typing drop-off address" list="address-suggestions" autocomplete="street-address" required>
+            </label>
+            <label>Ride date
+              <input type="date" name="Ride date" required>
+            </label>
+            <label>Pickup time
+              <input type="time" name="Pickup time" required>
+            </label>
+            <label>Wheelchair passenger?
+              <select name="Wheelchair passenger" required>
+                <option value="">Select</option>
+                <option>Yes</option>
+                <option>No</option>
+              </select>
+            </label>
+            <label>Trip type
+              <select name="Trip type">
+                <option>One-way</option>
+                <option>Round trip</option>
+                <option>Wait and return</option>
+              </select>
+            </label>
+            <label class="wide">Notes
+              <textarea name="Notes" rows="4" placeholder="Appointment time, building entrance, wheelchair details, return trip, special instructions"></textarea>
+            </label>
+          </div>
+          <datalist id="address-suggestions">
+            <option value="Boston, MA 02108"></option><option value="Boston, MA 02116"></option><option value="Cambridge, MA 02139"></option><option value="Somerville, MA 02143"></option><option value="Brookline, MA 02445"></option><option value="Newton, MA 02458"></option><option value="Watertown, MA 02472"></option><option value="Waltham, MA 02453"></option><option value="Quincy, MA 02169"></option><option value="Woburn, MA 01801"></option><option value="Burlington, MA 01803"></option><option value="Lexington, MA 02420"></option><option value="Lowell, MA 01852"></option>
+          </datalist>
+          <button class="btn primary form-submit" type="submit">Send ride request</button>
+          <p class="form-disclaimer">This form sends a booking request, not an automatic confirmation. We will confirm the ride by phone or email.</p>
+        </form>
       </div>
     </section>
 
@@ -95,7 +157,7 @@
           <article class="fleet-card"><img src="assets/fleet/fleet-3.jpeg" alt="Wheelchair accessible transportation vehicle"><div><h3>Wheelchair Accessible Van</h3><p><strong>Capacity:</strong> Driver + 3 passengers + 1 wheelchair</p><p><strong>Accessibility:</strong> BraunAbility</p><p><strong>Securement:</strong> Q’Straint</p></div></article>
           <article class="fleet-card"><img src="assets/fleet/fleet-4.jpeg" alt="Ramp accessible wheelchair van"><div><h3>Wheelchair Accessible Van</h3><p><strong>Capacity:</strong> Driver + 3 passengers + 1 wheelchair</p><p><strong>Accessibility:</strong> BraunAbility</p><p><strong>Securement:</strong> Q’Straint</p></div></article>
           <article class="fleet-card"><img src="assets/fleet/fleet-5.jpeg" alt="Side entry wheelchair van"><div><h3>Wheelchair Accessible Van</h3><p><strong>Capacity:</strong> Driver + 4 passengers + 1 wheelchair</p><p><strong>Accessibility:</strong> BraunAbility</p><p><strong>Securement:</strong> Q’Straint</p></div></article>
-          <article class="fleet-card"><img src="assets/fleet/hero-fleet.jpg" alt="M Express Mass fleet"><div><h3>Wheelchair Accessible Van</h3><p><strong>Capacity:</strong> Driver + 2 passengers + 1 wheelchair</p><p><strong>Accessibility:</strong> BraunAbility</p><p><strong>Securement:</strong> Q’Straint</p></div></article>
+          <article class="fleet-card"><img src="assets/fleet/hero-fleet.jpg" alt="M Express Transportation fleet"><div><h3>Wheelchair Accessible Van</h3><p><strong>Capacity:</strong> Driver + 2 passengers + 1 wheelchair</p><p><strong>Accessibility:</strong> BraunAbility</p><p><strong>Securement:</strong> Q’Straint</p></div></article>
         </div>
       </div>
     </section>
@@ -136,7 +198,37 @@
     </section>
   </main>
 
-  <footer class="footer"><div class="container"><p>© 2026 M Express Mass. Wheelchair-accessible transportation in Greater Boston.</p></div></footer>
+  <footer class="footer"><div class="container"><p>© 2026 M Express. Wheelchair-accessible transportation in Greater Boston.</p></div></footer>
+
+  <div class="booking-modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-booking></div>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <button class="modal-close" type="button" aria-label="Close booking form" data-close-booking>×</button>
+      <p class="eyebrow">Book a ride</p>
+      <h2 id="modal-title">Request transportation</h2>
+      <p class="modal-intro">Enter pickup, drop-off, date, time, and passenger details. We will confirm availability by phone or email.</p>
+      <form class="ride-form modal-form" action="https://formsubmit.co/mexpress.mass@gmail.com" method="POST">
+        <input type="hidden" name="_subject" value="New ride request from M Express website">
+        <input type="hidden" name="_captcha" value="false">
+        <input type="hidden" name="_template" value="table">
+        <div class="form-grid">
+          <label>Passenger name<input type="text" name="Passenger name" placeholder="Full name" required></label>
+          <label>Phone number<input type="tel" name="Phone" placeholder="(617) 000-0000" required></label>
+          <label class="wide">Email address <span class="optional">optional</span><input type="email" name="Email" placeholder="email@example.com"></label>
+          <label class="wide">Pickup address<input class="address-input" type="text" name="Pickup address" placeholder="Start typing pickup address" list="address-suggestions" autocomplete="street-address" required></label>
+          <label class="wide">Drop-off address<input class="address-input" type="text" name="Drop-off address" placeholder="Start typing drop-off address" list="address-suggestions" autocomplete="street-address" required></label>
+          <label>Ride date<input type="date" name="Ride date" required></label>
+          <label>Pickup time<input type="time" name="Pickup time" required></label>
+          <label>Wheelchair passenger?<select name="Wheelchair passenger" required><option value="">Select</option><option>Yes</option><option>No</option></select></label>
+          <label>Trip type<select name="Trip type"><option>One-way</option><option>Round trip</option><option>Wait and return</option></select></label>
+          <label class="wide">Notes<textarea name="Notes" rows="4" placeholder="Appointment time, entrance, wheelchair details, return trip, special instructions"></textarea></label>
+        </div>
+        <button class="btn primary form-submit" type="submit">Send ride request</button>
+        <p class="form-disclaimer">This is a request only. We will confirm the ride by phone or email.</p>
+      </form>
+    </div>
+  </div>
+  <a class="mobile-call" href="tel:+16172517049">Call Now</a>
   <script src="script.js"></script>
 </body>
 </html>
