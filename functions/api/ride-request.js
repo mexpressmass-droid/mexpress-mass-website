@@ -17,9 +17,22 @@ export async function onRequestPost({request,env}){
   for(const k of required) if(input[k].length>500) return json({error:"Field too long"},400);
   if(input.notes&&String(input.notes).length>3000) return json({error:"Notes too long"},400);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(input.ride_date)||!/^\d{2}:\d{2}$/.test(input.pickup_time)) return json({error:"Invalid date or time"},400);
-  // Massachusetts ride times: explicit offset avoids interpreting local pickup as UTC.
-  // DST offset must be resolved by a timezone-aware service before production.
-  const pickupAt=input.ride_date+"T"+input.pickup_time+":00-04:00";
+  // Resolve America/New_York local time, including daylight saving time.
+  const local=input.ride_date+"T"+input.pickup_time+":00";
+  const [y,m,d]=input.ride_date.split("-").map(Number);
+  const [hh,mm]=input.pickup_time.split(":").map(Number);
+  const wall=Date.UTC(y,m-1,d,hh,mm);
+  if(new Date(wall).toISOString().slice(0,16)!==local.slice(0,16)) return json({error:"Invalid date/time"},400);
+  const zone="America/New_York";
+  const fmt=new Intl.DateTimeFormat("en-US",{timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
+  const matches=[];
+  for(const offset of [-5,-4]){
+    const candidate=wall-offset*3600000;
+    const parts=Object.fromEntries(fmt.formatToParts(new Date(candidate)).filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
+    if(+parts.year===y&&+parts.month===m&&+parts.day===d&&+parts.hour===hh&&+parts.minute===mm) matches.push(candidate);
+  }
+  if(matches.length!==1) return json({error:"Pickup time is invalid or ambiguous due to daylight saving time. Please contact dispatch."},400);
+  const pickupAt=new Date(matches[0]).toISOString();
   const tripTypes={ "One-way":"one_way","Round trip":"round_trip","Wait and return":"wait_and_return"};
   const record={passenger_name:input.passenger_name.trim(),passenger_phone:input.passenger_phone.trim(),passenger_email:input.passenger_email?.trim()||null,pickup_address:input.pickup_address.trim(),dropoff_address:input.dropoff_address.trim(),pickup_at:pickupAt,wheelchair_required:input.wheelchair==="Yes",trip_type:tripTypes[input.trip_type]||"one_way",notes:input.notes?.trim()||null,status:"pending",source:"website"};
   const endpoint=env.SUPABASE_URL.replace(/\/$/,"")+"/rest/v1/trips";
