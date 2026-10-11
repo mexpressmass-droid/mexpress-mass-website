@@ -3,7 +3,7 @@
 // Keep the service role key out of browser code and GitHub.
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{"Content-Type":"application/json","Cache-Control":"no-store"}});
 export async function onRequestPost({request,env}){
-  if(!env.SUPABASE_URL||!env.SUPABASE_SERVICE_ROLE_KEY) return json({error:"Booking service is not configured"},503);
+  if(!env.SUPABASE_URL||!env.SUPABASE_SERVICE_ROLE_KEY||!env.TURNSTILE_SECRET_KEY) return json({error:"Booking service is not configured"},503);
   const origin=request.headers.get("Origin");
   const allowed=new URL(request.url).origin;
   if(origin&&origin!==allowed) return json({error:"Origin not allowed"},403);
@@ -12,6 +12,15 @@ export async function onRequestPost({request,env}){
   let input;
   try {input=await request.json()} catch {return json({error:"Invalid JSON"},400)}
   if(input.website) return json({ok:true}); // honeypot
+  if(typeof input.turnstile_token!=="string"||!input.turnstile_token) return json({error:"Verification required"},400);
+  let verification;
+  try {
+    const body=new FormData();body.set("secret",env.TURNSTILE_SECRET_KEY);body.set("response",input.turnstile_token);
+    body.set("remoteip",request.headers.get("CF-Connecting-IP")||"");
+    const check=await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify",{method:"POST",body});
+    verification=await check.json();
+  } catch {return json({error:"Verification unavailable"},502)}
+  if(!verification.success||verification.hostname!==new URL(request.url).hostname) return json({error:"Verification failed"},403);
   const required=["passenger_name","passenger_phone","pickup_address","dropoff_address","ride_date","pickup_time"];
   if(required.some(k=>typeof input[k]!=="string"||!input[k].trim())) return json({error:"Missing required fields"},400);
   for(const k of required) if(input[k].length>500) return json({error:"Field too long"},400);
