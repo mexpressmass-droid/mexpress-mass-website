@@ -1,11 +1,7 @@
 -- M Express dispatch foundation (run manually in a new Supabase project)
 create extension if not exists pgcrypto;
-DO $
-BEGIN
-  create type public.trip_status as enum ('pending','assigned','on_the_way','arrived','boarded','completed','cancelled');
-exception when duplicate_object then
-  null;
-END $;
+-- Existing Supabase project already contains public.trip_status.
+-- If installing into a fresh project, create that enum separately first.
 create table if not exists public.driver_profiles (
  id uuid primary key references auth.users(id) on delete cascade,
  username text not null unique check (username ~ '^[a-zA-Z0-9._-]{3,40}$'),
@@ -43,9 +39,7 @@ create index if not exists trips_status_idx on public.trips (status);
 alter table public.driver_profiles enable row level security;
 alter table public.trips enable row level security;
 alter table public.trip_status_events enable row level security;
-create or replace function public.is_dispatch_admin() returns boolean language sql stable security definer set search_path = '' as $$
- select exists(select 1 from public.driver_profiles where id = auth.uid() and role = 'admin')
-$$;
+create or replace function public.is_dispatch_admin() returns boolean language sql stable security definer set search_path = '' as 'select exists(select 1 from public.driver_profiles where id = auth.uid() and role = ''admin'')';
 drop policy if exists profiles_self_or_admin_select on public.driver_profiles;
 create policy profiles_self_or_admin_select on public.driver_profiles for select to authenticated using (id = auth.uid() or public.is_dispatch_admin());
 drop policy if exists profiles_admin_write on public.driver_profiles;
