@@ -22,3 +22,35 @@ function initAddressAutocomplete(){
   });
 }
 window.addEventListener('load',initAddressAutocomplete);
+
+
+document.querySelectorAll('form.ride-form').forEach(form=>{
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const button=form.querySelector('[type="submit"]');
+    const feedback=form.querySelector('.booking-feedback');
+    const data=new FormData(form);
+    const token=data.get('cf-turnstile-response');
+    if(!token){feedback.textContent='Please complete the security verification.';return}
+    const payload={
+      passenger_name:data.get('Passenger name'),passenger_phone:data.get('Phone'),
+      passenger_email:data.get('Email'),pickup_address:data.get('Pickup address'),
+      dropoff_address:data.get('Drop-off address'),ride_date:data.get('Ride date'),
+      pickup_time:data.get('Pickup time'),wheelchair:data.get('Wheelchair passenger'),
+      trip_type:data.get('Trip type'),notes:data.get('Notes'),
+      website:data.get('website'),turnstile_token:token
+    };
+    button.disabled=true;feedback.textContent='Sending your request...';
+    try{
+      const response=await fetch('/api/ride-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      if(!response.ok) throw new Error('Submission failed');
+      feedback.textContent='Request received. Our team will contact you to confirm your ride.';
+      form.reset();
+    }catch{
+      feedback.textContent='We could not send your request. Please call us to book your ride.';
+    }finally{
+      button.disabled=false;
+      if(window.turnstile) form.querySelectorAll('.cf-turnstile').forEach(el=>window.turnstile.reset(el));
+    }
+  });
+});
