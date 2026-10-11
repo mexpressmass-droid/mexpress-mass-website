@@ -1,6 +1,10 @@
 -- M Express dispatch foundation (run manually in a new Supabase project)
 create extension if not exists pgcrypto;
-create type public.trip_status as enum ('pending','assigned','on_the_way','arrived','boarded','completed','cancelled');
+do $ begin
+  create type public.trip_status as enum ('pending','assigned','on_the_way','arrived','boarded','completed','cancelled');
+exception when duplicate_object then
+  null;
+end $;
 create table public.driver_profiles (
  id uuid primary key references auth.users(id) on delete cascade,
  username text not null unique check (username ~ '^[a-zA-Z0-9._-]{3,40}$'),
