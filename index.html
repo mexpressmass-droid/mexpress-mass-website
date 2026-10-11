@@ -60,9 +60,9 @@
           <div class="mini-note">For urgent or same-day rides, please call <a href="tel:+16172517049">617-251-7049</a>.</div>
         </div>
         <form class="ride-form" action="/api/ride-request" method="POST">
-          <input type="hidden" name="_subject" value="New ride request from M Express website">
-          <input type="hidden" name="_captcha" value="false">
-          <input type="hidden" name="_template" value="table">
+
+
+
           <div class="form-grid">
             <label>Passenger name
               <input type="text" name="Passenger name" placeholder="Full name" required>
@@ -109,7 +109,10 @@
           <div class="cf-turnstile" data-sitekey="0x4AAAAAAFUCFxbCTxHC9fPv"></div>
           <label class="wide" style="position:absolute;left:-9999px" aria-hidden="true">Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label>
           <p class="booking-feedback" role="status" aria-live="polite"></p>
-          <button class="btn primary form-submit" type="submit">Send ride request</button>
+          <div class="cf-turnstile" data-sitekey="0x4AAAAAAFUCFxbCTxHC9fPv"></div>
+        <label class="wide" style="position:absolute;left:-9999px" aria-hidden="true">Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label>
+        <p class="booking-feedback" role="status" aria-live="polite"></p>
+        <button class="btn primary form-submit" type="submit">Send ride request</button>
           <p class="form-disclaimer">This form sends a booking request, not an automatic confirmation. We will confirm the ride by phone or email.</p>
         </form>
       </div>
@@ -210,10 +213,10 @@
       <p class="eyebrow">Book a ride</p>
       <h2 id="modal-title">Request transportation</h2>
       <p class="modal-intro">Enter pickup, drop-off, date, time, and passenger details. We will confirm availability by phone or email.</p>
-      <form class="ride-form modal-form" action="https://formsubmit.co/mexpress.mass@gmail.com" method="POST">
-        <input type="hidden" name="_subject" value="New ride request from M Express website">
-        <input type="hidden" name="_captcha" value="false">
-        <input type="hidden" name="_template" value="table">
+      <form class="ride-form modal-form" action="/api/ride-request" method="POST">
+
+
+
         <div class="form-grid">
           <label>Passenger name<input type="text" name="Passenger name" placeholder="Full name" required></label>
           <label>Phone number<input type="tel" name="Phone" placeholder="(617) 000-0000" required></label>
