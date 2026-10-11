@@ -1,0 +1,9 @@
+{
+  "name": "mexpress-mass-website",
+  "compatibility_date": "2026-10-11",
+  "main": "worker.js",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  }
+}
