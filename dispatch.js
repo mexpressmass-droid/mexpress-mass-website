@@ -9,20 +9,42 @@ function el(tag,txt){const e=document.createElement(tag);if(txt!==undefined)e.te
 function td(row,child){const cell=el("td");cell.append(child);row.append(cell);return cell}
 function select(options,value){const s=el("select");for(const [v,label] of options){const o=el("option",label);o.value=v;s.append(o)}s.value=value||"";return s}
 const SESSION_KEY="mexpress_dispatch_test_session";
+const VIEW_KEY="mexpress_dispatch_test_view";
+function saveView(){
+ if(!userId)return;
+ const tab=!$("messages-panel").classList.contains("hidden")?"messages":!$("my-rides-panel").classList.contains("hidden")?"my-rides":"dispatch";
+ localStorage.setItem(VIEW_KEY,JSON.stringify({user_id:userId,tab,chat_id:currentChatId,chat_employee:$("chat-employee").value,range:$("dispatch-range").value,date:$("dispatch-date").value,my_rides_tab:myRidesTab}));
+}
+async function restoreView(){
+ let saved;try{saved=JSON.parse(localStorage.getItem(VIEW_KEY)||"null")}catch{return}
+ if(!saved||saved.user_id!==userId)return;
+ if(["all","day","week"].includes(saved.range))$("dispatch-range").value=saved.range;
+ if(/^\d{4}-\d{2}-\d{2}$/.test(saved.date||""))$("dispatch-date").value=saved.date;
+ if(["active","history"].includes(saved.my_rides_tab)){myRidesTab=saved.my_rides_tab;$("my-active").classList.toggle("active",myRidesTab==="active");$("my-history").classList.toggle("active",myRidesTab==="history")}
+ if(saved.tab==="my-rides"){$("tab-my-rides").click()}
+ else if(saved.tab==="messages"){
+  await $("tab-messages").click();
+  if(saved.chat_id&&saved.chat_employee&&Array.from($("chat-employee").options).some(o=>o.value===saved.chat_employee)){
+   $("chat-employee").value=saved.chat_employee;
+   try{const id=await api("/rest/v1/rpc/open_private_chat",{method:"POST",body:JSON.stringify({p_other_user_id:saved.chat_employee})});if(id===saved.chat_id){currentChatId=id;$("chat-form").classList.remove("hidden");await loadChatMessages()}}catch(e){chatNotice(e.message,true)}
+  }
+ }else $("tab-dispatch").click();
+}
+
 let sessionRefreshTimer=null,refreshToken=null,sessionExpiresAt=0;
 function storeSession(auth){token=auth.access_token;refreshToken=auth.refresh_token;userId=auth.user?.id||userId;sessionExpiresAt=Date.now()+(Number(auth.expires_in)||3600)*1000;localStorage.setItem(SESSION_KEY,JSON.stringify({access_token:token,refresh_token:refreshToken,user_id:userId,expires_at:sessionExpiresAt}));scheduleSessionRefresh()}
 function scheduleSessionRefresh(){if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=setTimeout(()=>refreshSession().catch(()=>reset()),Math.max(1000,sessionExpiresAt-Date.now()-120000))}
 async function refreshSession(){if(!refreshToken)throw Error("Session expired");const auth=await api("/auth/v1/token?grant_type=refresh_token",{method:"POST",body:JSON.stringify({refresh_token:refreshToken})});storeSession(auth);return auth}
 async function verifyStaff(){const profile=await api("/rest/v1/driver_profiles?select=role&id=eq."+encodeURIComponent(userId));if(!["admin","dispatcher"].includes(profile[0]?.role))throw Error("This account is not authorized for dispatch.")}
 function showDashboard(){$("login-panel").classList.add("hidden");$("dashboard").classList.remove("hidden");$("logout").classList.remove("hidden");$("password").value=""}
-async function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");if(!saved?.refresh_token||!saved?.user_id)return;token=saved.access_token;refreshToken=saved.refresh_token;userId=saved.user_id;sessionExpiresAt=saved.expires_at||0;if(Date.now()>sessionExpiresAt-120000)await refreshSession();else scheduleSessionRefresh();await verifyStaff();showDashboard();await load()}catch(e){reset()}}
-function reset(){closeAttachMenu();$("password").type="password";$("toggle-password").textContent="Show";$("toggle-password").setAttribute("aria-label","Show password");$("toggle-password").setAttribute("aria-pressed","false");clearChatImages();closeChatLightbox();selectedChatFile=null;$("chat-file").value="";$("chat-camera-file").value="";$("chat-file-name").textContent="";if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=null;localStorage.removeItem(SESSION_KEY);refreshToken=null;sessionExpiresAt=0;if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();token=null;userId=null;drivers=[];$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
-$("login-form").addEventListener("submit",async e=>{e.preventDefault();$("login-error").textContent="";$("login-button").disabled=true;try{const r=await api("/auth/v1/token?grant_type=password",{method:"POST",body:JSON.stringify({email:$("email").value.trim(),password:$("password").value})});storeSession(r);await verifyStaff();showDashboard();await load()}catch(err){reset();$("login-error").textContent=err.message}finally{$("login-button").disabled=false}});
+async function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");if(!saved?.refresh_token||!saved?.user_id)return;token=saved.access_token;refreshToken=saved.refresh_token;userId=saved.user_id;sessionExpiresAt=saved.expires_at||0;if(Date.now()>sessionExpiresAt-120000)await refreshSession();else scheduleSessionRefresh();await verifyStaff();showDashboard();await restoreView();await load()}catch(e){reset()}}
+function reset(){closeAttachMenu();$("password").type="password";$("toggle-password").textContent="Show";$("toggle-password").setAttribute("aria-label","Show password");$("toggle-password").setAttribute("aria-pressed","false");clearChatImages();closeChatLightbox();selectedChatFile=null;$("chat-file").value="";$("chat-camera-file").value="";$("chat-file-name").textContent="";if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=null;localStorage.removeItem(SESSION_KEY);localStorage.removeItem(VIEW_KEY);refreshToken=null;sessionExpiresAt=0;if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();token=null;userId=null;drivers=[];$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
+$("login-form").addEventListener("submit",async e=>{e.preventDefault();$("login-error").textContent="";$("login-button").disabled=true;try{const r=await api("/auth/v1/token?grant_type=password",{method:"POST",body:JSON.stringify({email:$("email").value.trim(),password:$("password").value})});storeSession(r);await verifyStaff();showDashboard();localStorage.removeItem(VIEW_KEY);await load()}catch(err){reset();$("login-error").textContent=err.message}finally{$("login-button").disabled=false}});
 $("toggle-password").addEventListener("click",()=>{const input=$("password"),visible=input.type==="password";input.type=visible?"text":"password";$("toggle-password").textContent=visible?"Hide":"Show";$("toggle-password").setAttribute("aria-label",visible?"Hide password":"Show password");$("toggle-password").setAttribute("aria-pressed",String(visible))});
 $("logout").addEventListener("click",()=>{const oldToken=token;reset();if(oldToken)fetch(BASE+"/auth/v1/logout",{method:"POST",headers:{"apikey":KEY,"Authorization":"Bearer "+oldToken}}).catch(()=>{})});$("refresh").addEventListener("click",load);
 $("refresh-my-rides").addEventListener("click",loadMyRides);
-for(const id of ["dispatch-range","dispatch-date"])$(id).addEventListener("change",()=>{selectedTripIds.clear();load()});
-for(const [id,tab] of [["my-active","active"],["my-history","history"]])$(id).addEventListener("click",()=>{myRidesTab=tab;$("my-active").classList.toggle("active",tab==="active");$("my-history").classList.toggle("active",tab==="history");loadMyRides()});
+for(const id of ["dispatch-range","dispatch-date"])$(id).addEventListener("change",()=>{selectedTripIds.clear();saveView();load()});
+for(const [id,tab] of [["my-active","active"],["my-history","history"]])$(id).addEventListener("click",()=>{myRidesTab=tab;$("my-active").classList.toggle("active",tab==="active");$("my-history").classList.toggle("active",tab==="history");loadMyRides();saveView()});
 function bostonDate(value){return new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value))}
 function addDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)}
 function visibleTrip(t){const range=$("dispatch-range").value,day=$("dispatch-date").value,date=bostonDate(t.pickup_at);return range==="all"||!day||(range==="day"?date===day:date>=day&&date<addDays(day,7))}
@@ -35,7 +57,7 @@ $("bulk-apply").addEventListener("click",async()=>{const ids=[...selectedTripIds
 
 
 for(const [tab,panel,other] of [["tab-dispatch","dispatch-panel","my-rides-panel"],["tab-my-rides","my-rides-panel","dispatch-panel"]]){
-  $(tab).addEventListener("click",()=>{$(panel).classList.remove("hidden");$(other).classList.add("hidden");$("messages-panel").classList.add("hidden");$("tab-messages").classList.remove("active");$("tab-dispatch").classList.toggle("active",tab==="tab-dispatch");$("tab-my-rides").classList.toggle("active",tab==="tab-my-rides");if(tab==="tab-my-rides")loadMyRides()});
+  $(tab).addEventListener("click",()=>{$(panel).classList.remove("hidden");$(other).classList.add("hidden");$("messages-panel").classList.add("hidden");$("tab-messages").classList.remove("active");$("tab-dispatch").classList.toggle("active",tab==="tab-dispatch");$("tab-my-rides").classList.toggle("active",tab==="tab-my-rides");if(tab==="tab-my-rides")loadMyRides();saveView()});
 }
 async function loadMyRides(){
   const note=$("my-rides-notice"),list=$("my-rides-list");
@@ -144,7 +166,7 @@ $("tab-messages").addEventListener("click",async()=>{
   $("dispatch-panel").classList.add("hidden");$("my-rides-panel").classList.add("hidden");$("messages-panel").classList.remove("hidden");
   for(const id of ["tab-dispatch","tab-my-rides","tab-messages"])$(id).classList.toggle("active",id==="tab-messages");
   try{await loadChatDirectory();await loadChatMessages()}catch(e){chatNotice(e.message,true)}
-  if(chatPoll)clearInterval(chatPoll);
+  saveView();if(chatPoll)clearInterval(chatPoll);
   chatPoll=setInterval(()=>{if(token&&!$("messages-panel").classList.contains("hidden"))loadChatMessages()},8000);
 });
 $("open-chat").addEventListener("click",async()=>{
@@ -153,7 +175,7 @@ $("open-chat").addEventListener("click",async()=>{
   try{
     const id=await api("/rest/v1/rpc/open_private_chat",{method:"POST",body:JSON.stringify({p_other_user_id:other})});
     if(!id)throw Error("Unable to open conversation");
-    currentChatId=id;$("chat-form").classList.remove("hidden");await loadChatMessages();
+    currentChatId=id;$("chat-form").classList.remove("hidden");saveView();await loadChatMessages();
   }catch(e){chatNotice(e.message,true)}finally{$("open-chat").disabled=false}
 });
 $("refresh-messages").addEventListener("click",loadChatMessages);
