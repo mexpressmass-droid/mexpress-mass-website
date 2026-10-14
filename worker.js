@@ -5,7 +5,7 @@ async function employeeAdmin(request,env){
  const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
  if(request.method!=="POST")return reply({error:"Method not allowed"},405);
  const bearer=request.headers.get("Authorization")||"";
- if(!/^Bearer\\s+\\S+$/.test(bearer))return reply({error:"Sign in required"},401);
+ if(!/^Bearer\s+\S+$/.test(bearer))return reply({error:"Sign in required"},401);
  if(!env.SUPABASE_SERVICE_ROLE_KEY)return reply({error:"Server secret is not configured"},503);
  const serviceHeaders={"apikey":env.SUPABASE_SERVICE_ROLE_KEY,"Authorization":"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY};
  try{
