@@ -34,7 +34,7 @@ async function restoreView(){
      $("chat-employee").value=saved.chat_employee;
      try{
       const id=await api("/rest/v1/rpc/open_private_chat",{method:"POST",body:JSON.stringify({p_other_user_id:saved.chat_employee})});
-      if(id===saved.chat_id){currentChatId=id;chatRenderedId=null;chatLastMessageId=null;$("chat-form").classList.remove("hidden");await loadChatMessages()}
+      if(id===saved.chat_id){currentChatId=id;chatRenderedId=null;chatLastMessageId=null;chatLatestTimestamp=null;$("chat-form").classList.remove("hidden");await loadChatMessages()}
      }catch(e){chatNotice(e.message,true)}
     }
    }
@@ -101,7 +101,7 @@ const price=el("input");price.type="number";price.min="0";price.step="0.01";pric
 const driver=select([["","Unassigned"],...drivers.map(d=>[d.id,d.display_name+" ("+d.role+", "+d.username+")"])],trip.assigned_driver_id||"");td(row,driver);
 const save=el("button","Save");save.addEventListener("click",async()=>{save.disabled=true;try{const cents=price.value.trim()===""?null:Math.round(Number(price.value)*100);if(cents!==null&&(!Number.isSafeInteger(cents)||cents<0))throw Error("Invalid price");await api("/rest/v1/trips?id=eq."+encodeURIComponent(trip.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:status.value,price_cents:cents,assigned_driver_id:driver.value||null,updated_at:new Date().toISOString()})});msg("Ride updated.");}catch(err){msg(err.message,true)}finally{save.disabled=false}});td(row,save);body.append(row)}updateSelection();msg(trips.length+" ride(s) in selected view.");}catch(err){msg(err.message,true)}finally{refreshing=false}}
 
-let currentChatId=null,chatPoll=null,chatRenderedId=null,chatLastMessageId=null,chatLoading=false,chatForceBottom=false;
+let currentChatId=null,chatPoll=null,chatRenderedId=null,chatLastMessageId=null,chatLoading=false,chatForceBottom=false,chatLatestTimestamp=null;
 const CHAT_BOTTOM_THRESHOLD=75;
 const chatImageCache=new Map();
 function clearChatImages(){for(const url of chatImageCache.values())URL.revokeObjectURL(url);chatImageCache.clear()}
@@ -196,7 +196,7 @@ async function loadChatMessages(){
    thread.append(bubble);
   }
   if(!rows.length)thread.append(el("p","No messages yet. Say hello!"));
-  chatRenderedId=id;chatLastMessageId=latestId;
+  chatRenderedId=id;chatLastMessageId=latestId;chatLatestTimestamp=rows.at(-1)?.created_at||null;
   const scrollBottom=()=>{thread.scrollTop=thread.scrollHeight};
   if(newConversation){
    if(firstUnread)thread.scrollTop=Math.max(0,firstUnread.offsetTop-thread.offsetTop-12);
@@ -217,10 +217,7 @@ async function loadChatMessages(){
 }
 $("chat-thread").addEventListener("scroll",()=>{
  const thread=$("chat-thread");
- if(thread.scrollHeight-thread.scrollTop-thread.clientHeight<CHAT_BOTTOM_THRESHOLD&&currentChatId&&chatLastMessageId){
-  // Read positions are also updated on refresh when scrolled to the latest message.
-  getChatReadPosition(currentChatId).then(()=>loadChatMessages()).catch(()=>{});
- }
+ if(thread.scrollHeight-thread.scrollTop-thread.clientHeight<CHAT_BOTTOM_THRESHOLD&&currentChatId&&chatLatestTimestamp)markChatRead(currentChatId,chatLatestTimestamp);
 },{passive:true});
 
 $("tab-messages").addEventListener("click",async()=>{
