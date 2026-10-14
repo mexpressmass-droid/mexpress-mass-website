@@ -51,7 +51,7 @@ async function verifyStaff(){const profile=await api("/rest/v1/driver_profiles?s
 function showDashboard(){$("login-panel").classList.add("hidden");$("dashboard").classList.remove("hidden");$("logout").classList.remove("hidden");$("password").value=""}
 async function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");if(!saved?.refresh_token||!saved?.user_id)return;token=saved.access_token;refreshToken=saved.refresh_token;userId=saved.user_id;sessionExpiresAt=saved.expires_at||0;if(Date.now()>sessionExpiresAt-120000)await refreshSession();else scheduleSessionRefresh();await verifyStaff();showDashboard();await restoreView();await load()}catch(e){reset()}}
 function reset(){closeAttachMenu();$("password").type="password";$("toggle-password").textContent="Show";$("toggle-password").setAttribute("aria-label","Show password");$("toggle-password").setAttribute("aria-pressed","false");clearChatImages();closeChatLightbox();selectedChatFile=null;$("chat-file").value="";$("chat-camera-file").value="";$("chat-file-name").textContent="";if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=null;localStorage.removeItem(SESSION_KEY);localStorage.removeItem(VIEW_KEY);refreshToken=null;sessionExpiresAt=0;if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;chatRenderedId=null;chatLastMessageId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();staffRole=null;token=null;userId=null;drivers=[];$("tab-employees").classList.add("hidden");$("employees-panel").classList.add("hidden");$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
-$("login-form").addEventListener("submit",async e=>{e.preventDefault();$("login-error").textContent="";$("login-button").disabled=true;try{const r=await api("/auth/v1/token?grant_type=password",{method:"POST",body:JSON.stringify({email:$("email").value.trim(),password:$("password").value})});storeSession(r);await verifyStaff();showDashboard();localStorage.removeItem(VIEW_KEY);await load()}catch(err){reset();$("login-error").textContent=err.message}finally{$("login-button").disabled=false}});
+$("login-form").addEventListener("submit",async e=>{e.preventDefault();$("login-error").textContent="";$("login-button").disabled=true;try{const r=await api("/auth/v1/token?grant_type=password",{method:"POST",body:JSON.stringify({email:($("email").value.trim().includes("@")?$("email").value.trim():$("email").value.trim().toLowerCase()+"@auth.mexpress-mass.com"),password:$("password").value})});storeSession(r);await verifyStaff();showDashboard();localStorage.removeItem(VIEW_KEY);await load()}catch(err){reset();$("login-error").textContent=err.message}finally{$("login-button").disabled=false}});
 $("toggle-password").addEventListener("click",()=>{const input=$("password"),visible=input.type==="password";input.type=visible?"text":"password";$("toggle-password").textContent=visible?"Hide":"Show";$("toggle-password").setAttribute("aria-label",visible?"Hide password":"Show password");$("toggle-password").setAttribute("aria-pressed",String(visible))});
 $("logout").addEventListener("click",()=>{const oldToken=token;reset();if(oldToken)fetch(BASE+"/auth/v1/logout",{method:"POST",headers:{"apikey":KEY,"Authorization":"Bearer "+oldToken}}).catch(()=>{})});$("refresh").addEventListener("click",load);
 $("refresh-my-rides").addEventListener("click",loadMyRides);
@@ -277,8 +277,7 @@ async function employeeAdminRequest(payload){
 function employeeNotice(message,bad=false){const n=$("employee-password-notice");n.textContent=message;n.className=bad?"error":"success"}
 async function loadEmployees(){
  const result=await employeeAdminRequest({action:"list"});
- const select=$("employee-select");select.replaceChildren(new Option("Select employee",""));
- for(const p of result.employees||[])if(p.id!==userId)select.append(new Option(p.display_name+" ("+p.username+" · "+p.role+")",p.id));
+ for(const id of ["employee-select","employee-username-select"]){const select=$(id);select.replaceChildren(new Option("Select employee",""));for(const p of result.employees||[])if(p.id!==userId)select.append(new Option(p.display_name+" ("+p.username+" · "+p.role+")",p.id))}
 }
 $("tab-employees").addEventListener("click",async()=>{
  if(staffRole!=="admin")return;
@@ -288,6 +287,17 @@ $("tab-employees").addEventListener("click",async()=>{
  if(chatPoll)clearInterval(chatPoll);chatPoll=null;
  saveView();
  try{await loadEmployees()}catch(e){employeeNotice(e.message,true)}
+});
+$("employee-username-form").addEventListener("submit",async e=>{
+ e.preventDefault();if(staffRole!=="admin")return;
+ const target=$("employee-username-select").value,username=$("employee-new-username").value.trim().toLowerCase(),notice=$("employee-username-notice");
+ if(!target){notice.textContent="Select employee";notice.className="error";return}
+ if(!/^[a-z][a-z0-9._-]{2,31}$/.test(username)){notice.textContent="Invalid username";notice.className="error";return}
+ if(!window.confirm("Change this employee's login to "+username+"? They must use the new login next time."))return;
+ $("employee-save-username").disabled=true;notice.textContent="Saving...";notice.className="muted";
+ try{await employeeAdminRequest({action:"change_username",user_id:target,username});notice.textContent="Username updated. Employee can sign in with "+username+" and their existing password.";notice.className="success";$("employee-new-username").value="";await loadEmployees()}
+ catch(err){notice.textContent=err.message;notice.className="error"}
+ finally{$("employee-save-username").disabled=false}
 });
 $("employee-show-password").addEventListener("click",()=>{
  const input=$("employee-new-password"),visible=input.type==="password";
