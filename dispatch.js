@@ -71,15 +71,45 @@ $("bulk-apply").addEventListener("click",async()=>{const ids=[...selectedTripIds
 for(const [tab,panel,other] of [["tab-dispatch","dispatch-panel","my-rides-panel"],["tab-my-rides","my-rides-panel","dispatch-panel"]]){
   $(tab).addEventListener("click",()=>{$(panel).classList.remove("hidden");$(other).classList.add("hidden");$("employees-panel").classList.add("hidden");$("tab-employees").classList.remove("active");$("messages-panel").classList.add("hidden");$("tab-messages").classList.remove("active");$("tab-dispatch").classList.toggle("active",tab==="tab-dispatch");$("tab-my-rides").classList.toggle("active",tab==="tab-my-rides");if(tab==="tab-my-rides")loadMyRides();saveView()});
 }
+// Per-driver ride snapshots detect assignments and schedule edits while this web app is open.
+let rideRefreshBusy=false;
+const rideHighlights=new Map();
+function rideSnapshot(t){return JSON.stringify([t.pickup_at,t.pickup_address,t.dropoff_address,t.status,t.notes]);}
+function rideSnapshotKey(){return "mexpress_ride_snapshot_"+userId;}
+function updateRideNotifications(trips){
+ if(staffRole!=="driver"||!userId)return;
+ const key=rideSnapshotKey(),next={};
+ for(const t of trips.filter(t=>t.assigned_driver_id===userId))next[t.id]=rideSnapshot(t);
+ let previous=null;
+ try{previous=JSON.parse(localStorage.getItem(key)||"null")}catch{}
+ if(previous&&typeof previous==="object"){
+  for(const t of trips.filter(t=>t.assigned_driver_id===userId)){
+   if(!(t.id in previous))rideHighlights.set(t.id,{text:"NEW RIDE ADDED",until:Date.now()+60000});
+   else if(previous[t.id]!==next[t.id])rideHighlights.set(t.id,{text:"RIDE UPDATED",until:Date.now()+60000});
+  }
+ }
+ localStorage.setItem(key,JSON.stringify(next));
+ const count=[...rideHighlights.values()].filter(v=>v.until>Date.now()).length;
+ $("rides-alert-badge").textContent=count?String(count):"";
+ $("rides-alert-badge").classList.toggle("hidden",!count);
+}
+
 async function loadMyRides(){
+  if(rideRefreshBusy)return;rideRefreshBusy=true;
   const note=$("my-rides-notice"),list=$("my-rides-list");
   note.textContent="Loading...";
   try{
     const trips=staffRole==="driver"?await api("/rest/v1/trips?select=id,passenger_name,passenger_phone,pickup_at,pickup_address,dropoff_address,status,notes,assigned_driver_id&assigned_driver_id=eq."+encodeURIComponent(userId)+"&order=pickup_at.asc"):await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"});
     const mine=trips.filter(t=>t.assigned_driver_id===userId&&(["completed","cancelled"].includes(t.status)===(myRidesTab==="history"))).sort((a,b)=>myRidesTab==="history"?new Date(b.pickup_at)-new Date(a.pickup_at):new Date(a.pickup_at)-new Date(b.pickup_at));
+    updateRideNotifications(trips);
     list.replaceChildren();
     for(const trip of mine){
       const card=el("article");card.className="ride-card "+tripColor(trip.status);
+      const highlight=rideHighlights.get(trip.id);
+      if(highlight&&highlight.until>Date.now()){
+        card.classList.add("ride-new-highlight");
+        const banner=el("div",highlight.text);banner.className="ride-new-banner";card.append(banner);
+      }
       card.append(el("h3",trip.passenger_name),el("p","Pickup: "+new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"medium",timeStyle:"short"})),el("p","Phone: "+(trip.passenger_phone||"Not provided")),el("p","From: "+trip.pickup_address),el("p","To: "+trip.dropoff_address),el("p","Status: "+trip.status.replaceAll("_"," ")));
       if(trip.notes)card.append(el("p","Driver notes: "+trip.notes));
       for(const [label,address] of [["Pickup map",trip.pickup_address],["Drop-off map",trip.dropoff_address]]){
@@ -94,8 +124,9 @@ async function loadMyRides(){
       list.append(card);
     }
     note.textContent=mine.length+(myRidesTab==="history"?" ride(s) in history.":" active ride(s) assigned to you.");
-  }catch(e){note.textContent=e.message}
+  }catch(e){note.textContent=e.message}finally{rideRefreshBusy=false}
 }
+setInterval(()=>{if(token&&staffRole==="driver"&&!document.hidden)loadMyRides()},8000);
 async function load(){if(refreshing)return;refreshing=true;msg("Loading...");try{drivers=await api("/rest/v1/driver_profiles?select=id,username,display_name,role&role=in.(admin,dispatcher,driver)&order=display_name.asc");const trips=(await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"})).filter(visibleTrip).sort((a,b)=>new Date(a.pickup_at)-new Date(b.pickup_at)).slice(0,200);const body=$("trips");body.replaceChildren();visibleTripIds=trips.map(t=>t.id);for(const id of [...selectedTripIds])if(!visibleTripIds.includes(id))selectedTripIds.delete(id);for(const trip of trips){const row=el("tr");row.className=tripColor(trip.status);const check=el("input");check.type="checkbox";check.className="trip-select";check.value=trip.id;check.checked=selectedTripIds.has(trip.id);check.setAttribute("aria-label","Select ride for "+trip.passenger_name);check.addEventListener("change",()=>{if(check.checked)selectedTripIds.add(trip.id);else selectedTripIds.delete(trip.id);updateSelection()});td(row,check);const date=el("span",new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"medium",timeStyle:"short"}));td(row,date);const passenger=el("div");passenger.append(el("strong",trip.passenger_name),el("small",trip.passenger_phone));if(trip.passenger_email)passenger.append(el("small",trip.passenger_email));td(row,passenger);const route=el("div");route.append(el("div",trip.pickup_address),el("small","→ "+trip.dropoff_address));td(row,route);const details=el("div",trip.trip_type.replaceAll("_"," "));details.append(el("small",trip.wheelchair_required?"Wheelchair":"No wheelchair"));if(trip.notes)details.append(el("small",trip.notes));td(row,details);
 const statuses=["pending","confirmed","assigned","on_the_way","arrived","boarded","completed","cancelled"];const status=select([...new Set([trip.status,...statuses])].map(v=>[v,v.replaceAll("_"," ")]),trip.status);td(row,status);
 const price=el("input");price.type="number";price.min="0";price.step="0.01";price.value=trip.price_cents==null?"":(trip.price_cents/100).toFixed(2);price.placeholder="Not set";td(row,price);
