@@ -24,6 +24,34 @@ async function employeeAdmin(request,env){
    if(!result.ok)return reply({error:"Unable to load employees"},502);
    return reply({employees:await result.json()});
   }
+  if(body.action==="change_username"){
+   const target=body.user_id,username=body.username;
+   if(typeof target!=="string"||!/^[0-9a-f-]{36}$/i.test(target))return reply({error:"Select an employee"},400);
+   if(target===user.id)return reply({error:"Changing your own login is not supported here"},400);
+   if(typeof username!=="string"||!/^[a-z][a-z0-9._-]{2,31}$/.test(username))return reply({error:"Use 3–32 lowercase letters, numbers, dots, underscores or hyphens; start with a letter"},400);
+   const targetUrl=SUPABASE+"/rest/v1/driver_profiles?select=id,username&id=eq."+encodeURIComponent(target)+"&limit=1";
+   const targetRes=await fetch(targetUrl,{headers:serviceHeaders});
+   if(!targetRes.ok)return reply({error:"Employee lookup failed"},502);
+   const targetRows=await targetRes.json();if(!targetRows.length)return reply({error:"Employee not found"},404);
+   const duplicates=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&username=eq."+encodeURIComponent(username)+"&limit=1",{headers:serviceHeaders});
+   if(!duplicates.ok)return reply({error:"Username check failed"},502);
+   if((await duplicates.json()).some(p=>p.id!==target))return reply({error:"Username already in use"},409);
+   const authUserRes=await fetch(SUPABASE+"/auth/v1/admin/users/"+encodeURIComponent(target),{headers:serviceHeaders});
+   if(!authUserRes.ok)return reply({error:"Authentication account not found"},404);
+   const authUser=await authUserRes.json();
+   const oldEmail=authUser.email||"";
+   if(!/^[a-z][a-z0-9._-]*@auth\.mexpress-mass\.com$/i.test(oldEmail))return reply({error:"This account does not use a managed username login. Contact administrator."},400);
+   const nextEmail=username+"@auth.mexpress-mass.com";
+   if(oldEmail.toLowerCase()===nextEmail.toLowerCase())return reply({success:true});
+   const updateAuth=await fetch(SUPABASE+"/auth/v1/admin/users/"+encodeURIComponent(target),{method:"PUT",headers:{...serviceHeaders,"Content-Type":"application/json"},body:JSON.stringify({email:nextEmail,email_confirm:true})});
+   if(!updateAuth.ok)return reply({error:"Could not update authentication login"},502);
+   const updateProfile=await fetch(SUPABASE+"/rest/v1/driver_profiles?id=eq."+encodeURIComponent(target),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({username})});
+   if(!updateProfile.ok){
+    await fetch(SUPABASE+"/auth/v1/admin/users/"+encodeURIComponent(target),{method:"PUT",headers:{...serviceHeaders,"Content-Type":"application/json"},body:JSON.stringify({email:oldEmail,email_confirm:true})});
+    return reply({error:"Username update failed; login rollback attempted. Check employee before retrying."},502);
+   }
+   return reply({success:true});
+  }
   if(body.action!=="reset_password")return reply({error:"Unknown action"},400);
   const target=body.user_id,pass=body.password;
   if(typeof target!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(target))return reply({error:"Select an employee"},400);
