@@ -74,8 +74,22 @@ for(const [tab,panel,other] of [["tab-dispatch","dispatch-panel","my-rides-panel
 // Per-driver ride snapshots detect assignments and schedule edits while this web app is open.
 let rideRefreshBusy=false;
 const rideHighlights=new Map();
-function rideSnapshot(t){return JSON.stringify([t.pickup_at,t.pickup_address,t.dropoff_address,t.status,t.notes]);}
+function rideSnapshot(t){return {pickup_at:t.pickup_at||"",dropoff_at:t.dropoff_at||"",pickup_address:t.pickup_address||"",dropoff_address:t.dropoff_address||"",status:t.status||"",notes:t.notes||""};}
 function rideSnapshotKey(){return "mexpress_ride_snapshot_"+userId;}
+function rideTime(value){return value?new Date(value).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"medium",timeStyle:"short"}):"Not set";}
+function rideChanges(before,after){
+ const fields=[["pickup_at","PICKUP TIME UPDATED",rideTime],["dropoff_at","DROP-OFF TIME UPDATED",rideTime],["pickup_address","PICKUP ADDRESS UPDATED",v=>v||"Not set"],["dropoff_address","DROP-OFF ADDRESS UPDATED",v=>v||"Not set"],["notes","DRIVER NOTES UPDATED",v=>v||"Not set"]];
+ const changes=[];
+ for(const [field,label,format] of fields){
+  if(String(before[field]||"")!==String(after[field]||"")){
+   const wasEmpty=!before[field],nowEmpty=!after[field];
+   const heading=wasEmpty&&!nowEmpty?label.replace("UPDATED","ADDED"):label;
+   changes.push({heading,from:format(before[field]),to:format(after[field])});
+  }
+ }
+ if(before.status!==after.status)changes.push({heading:"RIDE STATUS UPDATED",from:before.status||"Not set",to:after.status||"Not set"});
+ return changes;
+}
 function updateRideNotifications(trips){
  if(staffRole!=="driver"||!userId)return;
  const key=rideSnapshotKey(),next={};
@@ -84,12 +98,18 @@ function updateRideNotifications(trips){
  try{previous=JSON.parse(localStorage.getItem(key)||"null")}catch{}
  if(previous&&typeof previous==="object"){
   for(const t of trips.filter(t=>t.assigned_driver_id===userId)){
-   if(!(t.id in previous))rideHighlights.set(t.id,{text:"NEW RIDE ADDED",until:Date.now()+60000});
-   else if(previous[t.id]!==next[t.id])rideHighlights.set(t.id,{text:"RIDE UPDATED",until:Date.now()+60000});
+   if(!(t.id in previous))rideHighlights.set(t.id,{text:"NEW RIDE ADDED",changes:[],until:Date.now()+60000});
+   else{
+    let old=previous[t.id];
+    if(typeof old==="string"){try{const values=JSON.parse(old);old={pickup_at:values[0],pickup_address:values[1],dropoff_address:values[2],status:values[3],notes:values[4]}}catch{old={}}}
+    const changes=rideChanges(old,next[t.id]);
+    if(changes.length)rideHighlights.set(t.id,{text:changes.length===1?changes[0].heading:"RIDE DETAILS UPDATED",changes,until:Date.now()+60000});
+   }
   }
  }
  localStorage.setItem(key,JSON.stringify(next));
- const count=[...rideHighlights.values()].filter(v=>v.until>Date.now()).length;
+ for(const [id,highlight] of rideHighlights)if(highlight.until<=Date.now())rideHighlights.delete(id);
+ const count=rideHighlights.size;
  $("rides-alert-badge").textContent=count?String(count):"";
  $("rides-alert-badge").classList.toggle("hidden",!count);
 }
@@ -109,6 +129,7 @@ async function loadMyRides(){
       if(highlight&&highlight.until>Date.now()){
         card.classList.add("ride-new-highlight");
         const banner=el("div",highlight.text);banner.className="ride-new-banner";card.append(banner);
+        for(const change of highlight.changes||[]){const detail=el("div");detail.className="ride-change-detail";detail.append(el("strong",change.heading),el("div","Previous: "+change.from),el("div","Updated: "+change.to));card.append(detail)}
       }
       card.append(el("h3",trip.passenger_name),el("p","Pickup: "+new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"medium",timeStyle:"short"})),el("p","Phone: "+(trip.passenger_phone||"Not provided")),el("p","From: "+trip.pickup_address),el("p","To: "+trip.dropoff_address),el("p","Status: "+trip.status.replaceAll("_"," ")));
       if(trip.notes)card.append(el("p","Driver notes: "+trip.notes));
