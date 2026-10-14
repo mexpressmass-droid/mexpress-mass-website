@@ -24,6 +24,13 @@ async function staffLogin(request,env){
  if(!response.ok)return reply({error:"Invalid credentials"},401);
  return reply(await response.json());
 }
+async function logEmployeeEvent(env,user,role,action,target,details){
+ const key=env.SUPABASE_SERVICE_ROLE_KEY;
+ try{
+  const r=await fetch(SUPABASE+"/rest/v1/employee_audit_log",{method:"POST",headers:{"apikey":key,"Authorization":"Bearer "+key,"Content-Type":"application/json"},body:JSON.stringify({actor_id:user.id,actor_role:role,action,target_id:target,details})});
+  if(!r.ok)console.error("Employee audit insert failed",r.status);
+ }catch(e){console.error("Employee audit insert failed")}
+}
 async function employeeAdmin(request,env){
  const headers={"Content-Type":"application/json","Cache-Control":"no-store"};
  const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
@@ -50,6 +57,12 @@ async function employeeAdmin(request,env){
    if(!result.ok)return reply({error:"Unable to load employees"},502);
    return reply({employees:await result.json()});
   }
+  if(body.action==="audit_log"){
+   if(staffRole!=="admin")return reply({error:"Administrator access required"},403);
+   const events=await fetch(SUPABASE+"/rest/v1/employee_audit_log?select=created_at,actor_id,actor_role,action,target_id,details&order=created_at.desc&limit=100",{headers:serviceHeaders});
+   if(!events.ok)return reply({error:"Activity log table is not configured yet"},503);
+   return reply({events:await events.json()});
+  }
   if(body.action==="create_driver"){
    const username=body.username,displayName=body.display_name,password=body.password;
    if(typeof username!=="string"||!/^[a-z][a-z0-9._-]{2,31}$/.test(username))return reply({error:"Invalid username"},400);
@@ -66,6 +79,7 @@ async function employeeAdmin(request,env){
     await fetch(SUPABASE+"/auth/v1/admin/users/"+encodeURIComponent(newUser.id),{method:"DELETE",headers:serviceHeaders});
     return reply({error:"Could not create driver profile; authentication account cleanup attempted"},502);
    }
+   await logEmployeeEvent(env,user,staffRole,"create_driver",newUser.id,{username,display_name:displayName.trim()});
    return reply({success:true,user_id:newUser.id});
   }
   if(staffRole!=="admin")return reply({error:"Administrator access required"},403);
@@ -95,6 +109,7 @@ async function employeeAdmin(request,env){
     await fetch(SUPABASE+"/auth/v1/admin/users/"+encodeURIComponent(target),{method:"PUT",headers:{...serviceHeaders,"Content-Type":"application/json"},body:JSON.stringify({email:oldEmail,email_confirm:true})});
     return reply({error:"Username update failed; login rollback attempted. Check employee before retrying."},502);
    }
+   await logEmployeeEvent(env,user,staffRole,"change_username",target,{old_username:targetRows[0].username,new_username:username});
    return reply({success:true});
   }
   if(body.action!=="reset_password")return reply({error:"Unknown action"},400);
@@ -106,6 +121,7 @@ async function employeeAdmin(request,env){
   if(!targetProfile.ok||!(await targetProfile.json()).length)return reply({error:"Employee not found"},404);
   const changed=await fetch(SUPABASE+"/auth/v1/admin/users/"+encodeURIComponent(target),{method:"PUT",headers:{...serviceHeaders,"Content-Type":"application/json"},body:JSON.stringify({password:pass})});
   if(!changed.ok)return reply({error:"Password could not be updated"},502);
+  await logEmployeeEvent(env,user,staffRole,"reset_password",target,{});
   return reply({success:true});
  }catch(e){return reply({error:"Unable to complete request"},500)}
 }
