@@ -24,7 +24,7 @@ async function restoreView(){
   if(["all","day","week"].includes(saved.range))$("dispatch-range").value=saved.range;
   if(/^\d{4}-\d{2}-\d{2}$/.test(saved.date||""))$("dispatch-date").value=saved.date;
   if(["active","history"].includes(saved.my_rides_tab)){myRidesTab=saved.my_rides_tab;$("my-active").classList.toggle("active",myRidesTab==="active");$("my-history").classList.toggle("active",myRidesTab==="history")}
-  if(saved.tab==="employees"&&staffRole==="admin"){$("tab-employees").click()}
+  if(saved.tab==="employees"&&["admin","dispatcher"].includes(staffRole)){$("tab-employees").click()}
   else if(saved.tab==="my-rides"){$("tab-my-rides").click()}
   else if(saved.tab==="messages"){
    $("tab-messages").click();
@@ -47,11 +47,11 @@ let sessionRefreshTimer=null,refreshToken=null,sessionExpiresAt=0;
 function storeSession(auth){token=auth.access_token;refreshToken=auth.refresh_token;userId=auth.user?.id||userId;sessionExpiresAt=Date.now()+(Number(auth.expires_in)||3600)*1000;localStorage.setItem(SESSION_KEY,JSON.stringify({access_token:token,refresh_token:refreshToken,user_id:userId,expires_at:sessionExpiresAt}));scheduleSessionRefresh()}
 function scheduleSessionRefresh(){if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=setTimeout(()=>refreshSession().catch(()=>reset()),Math.max(1000,sessionExpiresAt-Date.now()-120000))}
 async function refreshSession(){if(!refreshToken)throw Error("Session expired");const auth=await api("/auth/v1/token?grant_type=refresh_token",{method:"POST",body:JSON.stringify({refresh_token:refreshToken})});storeSession(auth);return auth}
-async function verifyStaff(){const profile=await api("/rest/v1/driver_profiles?select=role&id=eq."+encodeURIComponent(userId));if(!["admin","dispatcher"].includes(profile[0]?.role))throw Error("This account is not authorized for dispatch.");staffRole=profile[0].role;$("tab-employees").classList.toggle("hidden",staffRole!=="admin")}
+async function verifyStaff(){const profile=await api("/rest/v1/driver_profiles?select=role&id=eq."+encodeURIComponent(userId));if(!["admin","dispatcher"].includes(profile[0]?.role))throw Error("This account is not authorized for dispatch.");staffRole=profile[0].role;$("tab-employees").classList.toggle("hidden",!["admin","dispatcher"].includes(staffRole));$("employee-admin-tools").classList.toggle("hidden",staffRole!=="admin")}
 function showDashboard(){$("login-panel").classList.add("hidden");$("dashboard").classList.remove("hidden");$("logout").classList.remove("hidden");$("password").value=""}
 async function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");if(!saved?.refresh_token||!saved?.user_id)return;token=saved.access_token;refreshToken=saved.refresh_token;userId=saved.user_id;sessionExpiresAt=saved.expires_at||0;if(Date.now()>sessionExpiresAt-120000)await refreshSession();else scheduleSessionRefresh();await verifyStaff();showDashboard();await restoreView();await load()}catch(e){reset()}}
 function reset(){closeAttachMenu();$("password").type="password";$("toggle-password").textContent="Show";$("toggle-password").setAttribute("aria-label","Show password");$("toggle-password").setAttribute("aria-pressed","false");clearChatImages();closeChatLightbox();selectedChatFile=null;$("chat-file").value="";$("chat-camera-file").value="";$("chat-file-name").textContent="";if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=null;localStorage.removeItem(SESSION_KEY);localStorage.removeItem(VIEW_KEY);refreshToken=null;sessionExpiresAt=0;if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;chatRenderedId=null;chatLastMessageId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();staffRole=null;token=null;userId=null;drivers=[];$("tab-employees").classList.add("hidden");$("employees-panel").classList.add("hidden");$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
-$("login-form").addEventListener("submit",async e=>{e.preventDefault();$("login-error").textContent="";$("login-button").disabled=true;try{const r=await api("/auth/v1/token?grant_type=password",{method:"POST",body:JSON.stringify({email:($("email").value.trim().includes("@")?$("email").value.trim():$("email").value.trim().toLowerCase()+"@auth.mexpress-mass.com"),password:$("password").value})});storeSession(r);await verifyStaff();showDashboard();localStorage.removeItem(VIEW_KEY);await load()}catch(err){reset();$("login-error").textContent=err.message}finally{$("login-button").disabled=false}});
+$("login-form").addEventListener("submit",async e=>{e.preventDefault();$("login-error").textContent="";$("login-button").disabled=true;try{const response=await fetch("/api/dispatch/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({login:$("email").value.trim(),password:$("password").value})});const r=await response.json();if(!response.ok)throw Error(r.error||"Login failed");storeSession(r);await verifyStaff();showDashboard();localStorage.removeItem(VIEW_KEY);await load()}catch(err){reset();$("login-error").textContent=err.message}finally{$("login-button").disabled=false}});
 $("toggle-password").addEventListener("click",()=>{const input=$("password"),visible=input.type==="password";input.type=visible?"text":"password";$("toggle-password").textContent=visible?"Hide":"Show";$("toggle-password").setAttribute("aria-label",visible?"Hide password":"Show password");$("toggle-password").setAttribute("aria-pressed",String(visible))});
 $("logout").addEventListener("click",()=>{const oldToken=token;reset();if(oldToken)fetch(BASE+"/auth/v1/logout",{method:"POST",headers:{"apikey":KEY,"Authorization":"Bearer "+oldToken}}).catch(()=>{})});$("refresh").addEventListener("click",load);
 $("refresh-my-rides").addEventListener("click",loadMyRides);
@@ -100,7 +100,8 @@ async function load(){if(refreshing)return;refreshing=true;msg("Loading...");try
 const statuses=["pending","confirmed","assigned","on_the_way","arrived","boarded","completed","cancelled"];const status=select([...new Set([trip.status,...statuses])].map(v=>[v,v.replaceAll("_"," ")]),trip.status);td(row,status);
 const price=el("input");price.type="number";price.min="0";price.step="0.01";price.value=trip.price_cents==null?"":(trip.price_cents/100).toFixed(2);price.placeholder="Not set";td(row,price);
 const driver=select([["","Unassigned"],...drivers.map(d=>[d.id,d.display_name+" ("+d.role+", "+d.username+")"])],trip.assigned_driver_id||"");td(row,driver);
-const save=el("button","Save");save.addEventListener("click",async()=>{save.disabled=true;try{const cents=price.value.trim()===""?null:Math.round(Number(price.value)*100);if(cents!==null&&(!Number.isSafeInteger(cents)||cents<0))throw Error("Invalid price");await api("/rest/v1/trips?id=eq."+encodeURIComponent(trip.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:status.value,price_cents:cents,assigned_driver_id:driver.value||null,updated_at:new Date().toISOString()})});msg("Ride updated.");}catch(err){msg(err.message,true)}finally{save.disabled=false}});td(row,save);body.append(row)}updateSelection();msg(trips.length+" ride(s) in selected view.");}catch(err){msg(err.message,true)}finally{refreshing=false}}
+const internal=el("textarea");internal.rows=3;internal.maxLength=4000;internal.style.minWidth="200px";internal.placeholder="Staff only — not visible to driver";internal.value=trip.internal_notes||"";td(row,internal);
+const save=el("button","Save");save.addEventListener("click",async()=>{save.disabled=true;try{const cents=price.value.trim()===""?null:Math.round(Number(price.value)*100);if(cents!==null&&(!Number.isSafeInteger(cents)||cents<0))throw Error("Invalid price");await api("/rest/v1/trips?id=eq."+encodeURIComponent(trip.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:status.value,price_cents:cents,assigned_driver_id:driver.value||null,internal_notes:internal.value.trim()||null,updated_at:new Date().toISOString()})});msg("Ride updated.");}catch(err){msg(err.message,true)}finally{save.disabled=false}});td(row,save);body.append(row)}updateSelection();msg(trips.length+" ride(s) in selected view.");}catch(err){msg(err.message,true)}finally{refreshing=false}}
 
 let currentChatId=null,chatPoll=null,chatRenderedId=null,chatLastMessageId=null,chatLoading=false,chatForceBottom=false,chatLatestTimestamp=null,chatOtherReadAt=null;
 const CHAT_BOTTOM_THRESHOLD=75;
@@ -280,13 +281,25 @@ async function loadEmployees(){
  for(const id of ["employee-select","employee-username-select"]){const select=$(id);select.replaceChildren(new Option("Select employee",""));for(const p of result.employees||[])if(p.id!==userId)select.append(new Option(p.display_name+" ("+p.username+" · "+p.role+")",p.id))}
 }
 $("tab-employees").addEventListener("click",async()=>{
- if(staffRole!=="admin")return;
+ if(!["admin","dispatcher"].includes(staffRole))return;
  for(const id of ["dispatch-panel","my-rides-panel","messages-panel"])$(id).classList.add("hidden");
  $("employees-panel").classList.remove("hidden");
  for(const id of ["tab-dispatch","tab-my-rides","tab-messages","tab-employees"])$(id).classList.toggle("active",id==="tab-employees");
  if(chatPoll)clearInterval(chatPoll);chatPoll=null;
  saveView();
- try{await loadEmployees()}catch(e){employeeNotice(e.message,true)}
+ if(staffRole==="admin")try{await loadEmployees()}catch(e){employeeNotice(e.message,true)}
+});
+$("employee-create-form").addEventListener("submit",async e=>{
+ e.preventDefault();if(!["admin","dispatcher"].includes(staffRole))return;
+ const notice=$("create-driver-notice"),button=$("create-driver-button");
+ button.disabled=true;notice.textContent="Creating driver...";notice.className="muted";
+ try{
+  const username=$("create-username").value.trim().toLowerCase();
+  await employeeAdminRequest({action:"create_driver",username,display_name:$("create-display-name").value.trim(),password:$("create-password").value});
+  notice.textContent="Driver created. Sign in with username: "+username;notice.className="success";
+  $("employee-create-form").reset();await load();
+  if(staffRole==="admin")await loadEmployees();
+ }catch(err){notice.textContent=err.message;notice.className="error"}finally{button.disabled=false}
 });
 $("employee-username-form").addEventListener("submit",async e=>{
  e.preventDefault();if(staffRole!=="admin")return;
