@@ -10,26 +10,36 @@ function td(row,child){const cell=el("td");cell.append(child);row.append(cell);r
 function select(options,value){const s=el("select");for(const [v,label] of options){const o=el("option",label);o.value=v;s.append(o)}s.value=value||"";return s}
 const SESSION_KEY="mexpress_dispatch_test_session";
 const VIEW_KEY="mexpress_dispatch_test_view";
+let restoringView=false;
 function saveView(){
- if(!userId)return;
+ if(!userId||restoringView)return;
  const tab=!$("messages-panel").classList.contains("hidden")?"messages":!$("my-rides-panel").classList.contains("hidden")?"my-rides":"dispatch";
  localStorage.setItem(VIEW_KEY,JSON.stringify({user_id:userId,tab,chat_id:currentChatId,chat_employee:$("chat-employee").value,range:$("dispatch-range").value,date:$("dispatch-date").value,my_rides_tab:myRidesTab}));
 }
 async function restoreView(){
  let saved;try{saved=JSON.parse(localStorage.getItem(VIEW_KEY)||"null")}catch{return}
  if(!saved||saved.user_id!==userId)return;
- if(["all","day","week"].includes(saved.range))$("dispatch-range").value=saved.range;
- if(/^\d{4}-\d{2}-\d{2}$/.test(saved.date||""))$("dispatch-date").value=saved.date;
- if(["active","history"].includes(saved.my_rides_tab)){myRidesTab=saved.my_rides_tab;$("my-active").classList.toggle("active",myRidesTab==="active");$("my-history").classList.toggle("active",myRidesTab==="history")}
- if(saved.tab==="my-rides"){$("tab-my-rides").click()}
- else if(saved.tab==="messages"){
-  $("tab-messages").click();
-  await loadChatDirectory();
-  if(saved.chat_id&&saved.chat_employee&&Array.from($("chat-employee").options).some(o=>o.value===saved.chat_employee)){
-   $("chat-employee").value=saved.chat_employee;
-   try{const id=await api("/rest/v1/rpc/open_private_chat",{method:"POST",body:JSON.stringify({p_other_user_id:saved.chat_employee})});if(id===saved.chat_id){currentChatId=id;$("chat-form").classList.remove("hidden");await loadChatMessages()}}catch(e){chatNotice(e.message,true)}
-  }
- }else $("tab-dispatch").click();
+ restoringView=true;
+ try{
+  if(["all","day","week"].includes(saved.range))$("dispatch-range").value=saved.range;
+  if(/^\d{4}-\d{2}-\d{2}$/.test(saved.date||""))$("dispatch-date").value=saved.date;
+  if(["active","history"].includes(saved.my_rides_tab)){myRidesTab=saved.my_rides_tab;$("my-active").classList.toggle("active",myRidesTab==="active");$("my-history").classList.toggle("active",myRidesTab==="history")}
+  if(saved.tab==="my-rides"){$("tab-my-rides").click()}
+  else if(saved.tab==="messages"){
+   $("tab-messages").click();
+   await loadChatDirectory();
+   if(saved.chat_id&&saved.chat_employee){
+    const person=Array.from($("chat-employee").options).find(o=>o.value===saved.chat_employee);
+    if(person){
+     $("chat-employee").value=saved.chat_employee;
+     try{
+      const id=await api("/rest/v1/rpc/open_private_chat",{method:"POST",body:JSON.stringify({p_other_user_id:saved.chat_employee})});
+      if(id===saved.chat_id){currentChatId=id;$("chat-form").classList.remove("hidden");await loadChatMessages()}
+     }catch(e){chatNotice(e.message,true)}
+    }
+   }
+  }else $("tab-dispatch").click();
+ }finally{restoringView=false}
 }
 
 let sessionRefreshTimer=null,refreshToken=null,sessionExpiresAt=0;
