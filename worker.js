@@ -52,10 +52,9 @@ async function employeeAdmin(request,env){
   const body=await request.json().catch(()=>null);
   if(!body||typeof body!=="object")return reply({error:"Invalid request"},400);
   if(body.action==="list"){
-   if(staffRole!=="admin")return reply({error:"Administrator access required"},403);
    const result=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id,username,display_name,role&order=role.asc,username.asc",{headers:serviceHeaders});
    if(!result.ok)return reply({error:"Unable to load employees"},502);
-   return reply({employees:await result.json()});
+   return reply({employees:(await result.json()).filter(p=>staffRole==="admin"||p.role==="driver")});
   }
   if(body.action==="audit_log"){
    if(staffRole!=="admin")return reply({error:"Administrator access required"},403);
@@ -81,10 +80,13 @@ async function employeeAdmin(request,env){
    const rides=await created.json();
    return reply({success:true,ride_id:rides[0]?.id},201);
   }
-  if(body.action==="create_driver"){
+  if(body.action==="create_employee"||body.action==="create_driver"){
+   const role=body.action==="create_driver"?"driver":body.role;
+   if(!["driver","dispatcher"].includes(role))return reply({error:"Invalid employee role"},400);
+   if(role==="dispatcher"&&staffRole!=="admin")return reply({error:"Only administrators can create dispatchers"},403);
    const username=body.username,displayName=body.display_name,password=body.password;
    if(typeof username!=="string"||!/^[a-z][a-z0-9._-]{2,31}$/.test(username))return reply({error:"Invalid username"},400);
-   if(typeof displayName!=="string"||!displayName.trim()||displayName.length>100)return reply({error:"Invalid driver name"},400);
+   if(typeof displayName!=="string"||!displayName.trim()||displayName.length>100)return reply({error:"Invalid employee name"},400);
    if(typeof password!=="string"||password.length<12||password.length>128)return reply({error:"Password must contain 12–128 characters"},400);
    const existing=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&username=eq."+encodeURIComponent(username)+"&limit=1",{headers:serviceHeaders});
    if(!existing.ok)return reply({error:"Username check failed"},502);
@@ -92,24 +94,24 @@ async function employeeAdmin(request,env){
    const created=await fetch(SUPABASE+"/auth/v1/admin/users",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json"},body:JSON.stringify({email:username+"@auth.mexpress-mass.com",password,email_confirm:true})});
    if(!created.ok)return reply({error:"Could not create authentication account (username may be taken)"},502);
    const newUser=await created.json();
-   const inserted=await fetch(SUPABASE+"/rest/v1/driver_profiles",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({id:newUser.id,username,display_name:displayName.trim(),role:"driver"})});
+   const inserted=await fetch(SUPABASE+"/rest/v1/driver_profiles",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({id:newUser.id,username,display_name:displayName.trim(),role})});
    if(!inserted.ok){
     await fetch(SUPABASE+"/auth/v1/admin/users/"+encodeURIComponent(newUser.id),{method:"DELETE",headers:serviceHeaders});
     return reply({error:"Could not create driver profile; authentication account cleanup attempted"},502);
    }
-   await logEmployeeEvent(env,user,staffRole,"create_driver",newUser.id,{username,display_name:displayName.trim()});
+   await logEmployeeEvent(env,user,staffRole,"create_"+role,newUser.id,{username,display_name:displayName.trim(),role});
    return reply({success:true,user_id:newUser.id});
   }
-  if(staffRole!=="admin")return reply({error:"Administrator access required"},403);
   if(body.action==="change_username"){
    const target=body.user_id,username=body.username;
    if(typeof target!=="string"||!/^[0-9a-f-]{36}$/i.test(target))return reply({error:"Select an employee"},400);
    if(target===user.id)return reply({error:"Changing your own login is not supported here"},400);
    if(typeof username!=="string"||!/^[a-z][a-z0-9._-]{2,31}$/.test(username))return reply({error:"Use 3–32 lowercase letters, numbers, dots, underscores or hyphens; start with a letter"},400);
-   const targetUrl=SUPABASE+"/rest/v1/driver_profiles?select=id,username&id=eq."+encodeURIComponent(target)+"&limit=1";
+   const targetUrl=SUPABASE+"/rest/v1/driver_profiles?select=id,username,role&id=eq."+encodeURIComponent(target)+"&limit=1";
    const targetRes=await fetch(targetUrl,{headers:serviceHeaders});
    if(!targetRes.ok)return reply({error:"Employee lookup failed"},502);
    const targetRows=await targetRes.json();if(!targetRows.length)return reply({error:"Employee not found"},404);
+   if(staffRole!=="admin"&&targetRows[0].role!=="driver")return reply({error:"Dispatchers can only edit drivers"},403);
    const duplicates=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&username=eq."+encodeURIComponent(username)+"&limit=1",{headers:serviceHeaders});
    if(!duplicates.ok)return reply({error:"Username check failed"},502);
    if((await duplicates.json()).some(p=>p.id!==target))return reply({error:"Username already in use"},409);
@@ -135,8 +137,10 @@ async function employeeAdmin(request,env){
   if(typeof target!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(target))return reply({error:"Select an employee"},400);
   if(target===user.id)return reply({error:"Use account recovery to change your own password"},400);
   if(typeof pass!=="string"||pass.length<12||pass.length>128)return reply({error:"Password must contain 12–128 characters"},400);
-  const targetProfile=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&id=eq."+encodeURIComponent(target)+"&limit=1",{headers:serviceHeaders});
-  if(!targetProfile.ok||!(await targetProfile.json()).length)return reply({error:"Employee not found"},404);
+  const targetProfile=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id,role&id=eq."+encodeURIComponent(target)+"&limit=1",{headers:serviceHeaders});
+  if(!targetProfile.ok)return reply({error:"Employee lookup failed"},502);
+  const targetProfiles=await targetProfile.json();if(!targetProfiles.length)return reply({error:"Employee not found"},404);
+  if(staffRole!=="admin"&&targetProfiles[0].role!=="driver")return reply({error:"Dispatchers can only edit drivers"},403);
   const changed=await fetch(SUPABASE+"/auth/v1/admin/users/"+encodeURIComponent(target),{method:"PUT",headers:{...serviceHeaders,"Content-Type":"application/json"},body:JSON.stringify({password:pass})});
   if(!changed.ok)return reply({error:"Password could not be updated"},502);
   await logEmployeeEvent(env,user,staffRole,"reset_password",target,{});
