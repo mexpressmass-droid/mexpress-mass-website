@@ -63,6 +63,24 @@ async function employeeAdmin(request,env){
    if(!events.ok)return reply({error:"Activity log table is not configured yet"},503);
    return reply({events:await events.json()});
   }
+  if(body.action==="create_ride"){
+   const fields=["passenger_name","passenger_phone","pickup_address","dropoff_address","pickup_at"];
+   if(fields.some(k=>typeof body[k]!=="string"||!body[k].trim()||body[k].length>500))return reply({error:"Passenger, phone, addresses and pickup time are required"},400);
+   const pickupDate=new Date(body.pickup_at);
+   if(!Number.isFinite(pickupDate.getTime()))return reply({error:"Invalid pickup time"},400);
+   const record={passenger_name:body.passenger_name.trim(),passenger_phone:body.passenger_phone.trim(),passenger_email:typeof body.passenger_email==="string"?body.passenger_email.trim()||null:null,pickup_address:body.pickup_address.trim(),dropoff_address:body.dropoff_address.trim(),pickup_at:pickupDate.toISOString(),wheelchair_required:body.wheelchair_required===true,trip_type:["one_way","round_trip"].includes(body.trip_type)?body.trip_type:"one_way",notes:typeof body.notes==="string"?body.notes.slice(0,3000).trim()||null:null,status:"pending",source:"dispatch"};
+   if(body.assigned_driver_id){
+    if(typeof body.assigned_driver_id!=="string"||!/^[0-9a-f-]{36}$/i.test(body.assigned_driver_id))return reply({error:"Invalid driver"},400);
+    const driver=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&id=eq."+encodeURIComponent(body.assigned_driver_id)+"&role=eq.driver&limit=1",{headers:serviceHeaders});
+    if(!driver.ok||!(await driver.json()).length)return reply({error:"Driver not found"},400);
+    record.assigned_driver_id=body.assigned_driver_id;
+    record.status="assigned";
+   }
+   const created=await fetch(SUPABASE+"/rest/v1/trips",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(record)});
+   if(!created.ok){console.error("Ride creation failed",created.status,await created.text());return reply({error:"Unable to create ride"},502)}
+   const rides=await created.json();
+   return reply({success:true,ride_id:rides[0]?.id},201);
+  }
   if(body.action==="create_driver"){
    const username=body.username,displayName=body.display_name,password=body.password;
    if(typeof username!=="string"||!/^[a-z][a-z0-9._-]{2,31}$/.test(username))return reply({error:"Invalid username"},400);
