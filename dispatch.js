@@ -150,15 +150,7 @@ async function loadMyRides(){
 setInterval(()=>{if(token&&staffRole==="driver"&&!document.hidden)loadMyRides()},8000);
 
 // Dispatchers and administrators can create rides without accessing the Supabase service key.
-$("create-ride-toggle").addEventListener("click",()=>{
- const panel=$("create-ride-panel");panel.classList.toggle("hidden");
- if(!panel.classList.contains("hidden")){
-  const chooser=$("new-driver"),current=chooser.value;
-  chooser.replaceChildren(new Option("Unassigned",""));
-  for(const d of drivers.filter(d=>d.role==="driver"))chooser.append(new Option(d.display_name||d.username,d.id));
-  chooser.value=current;
- }
-});
+$("create-ride-toggle").addEventListener("click",()=>{const panel=$("create-ride-panel");panel.classList.toggle("hidden");const chooser=$("new-driver");chooser.replaceChildren(new Option("Unassigned",""));for(const d of drivers.filter(d=>d.role==="driver"))chooser.append(new Option(d.display_name||d.username,d.id));});
 $("create-ride-cancel").addEventListener("click",()=>$("create-ride-panel").classList.add("hidden"));
 $("create-ride-form").addEventListener("submit",async event=>{
  event.preventDefault();
