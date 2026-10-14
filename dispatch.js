@@ -8,7 +8,7 @@ async function api(path,opts={}){const r=await fetch(BASE+path,{...opts,headers:
 function el(tag,txt){const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;return e}
 function td(row,child){const cell=el("td");cell.append(child);row.append(cell);return cell}
 function select(options,value){const s=el("select");for(const [v,label] of options){const o=el("option",label);o.value=v;s.append(o)}s.value=value||"";return s}
-function reset(){selectedTripIds.clear();token=null;userId=null;drivers=[];$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
+function reset(){if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();token=null;userId=null;drivers=[];$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
 $("login-form").addEventListener("submit",async e=>{e.preventDefault();$("login-error").textContent="";$("login-button").disabled=true;try{const r=await api("/auth/v1/token?grant_type=password",{method:"POST",body:JSON.stringify({email:$("email").value.trim(),password:$("password").value})});token=r.access_token;userId=r.user.id;const profile=await api("/rest/v1/driver_profiles?select=role&id=eq."+encodeURIComponent(r.user.id));if(!["admin","dispatcher"].includes(profile[0]?.role))throw Error("This account is not authorized for dispatch.");$("login-panel").classList.add("hidden");$("dashboard").classList.remove("hidden");$("logout").classList.remove("hidden");$("password").value="";await load()}catch(err){reset();$("login-error").textContent=err.message}finally{$("login-button").disabled=false}});
 $("logout").addEventListener("click",reset);$("refresh").addEventListener("click",load);
 $("refresh-my-rides").addEventListener("click",loadMyRides);
@@ -26,7 +26,7 @@ $("bulk-apply").addEventListener("click",async()=>{const ids=[...selectedTripIds
 
 
 for(const [tab,panel,other] of [["tab-dispatch","dispatch-panel","my-rides-panel"],["tab-my-rides","my-rides-panel","dispatch-panel"]]){
-  $(tab).addEventListener("click",()=>{$(panel).classList.remove("hidden");$(other).classList.add("hidden");$("tab-dispatch").classList.toggle("active",tab==="tab-dispatch");$("tab-my-rides").classList.toggle("active",tab==="tab-my-rides");if(tab==="tab-my-rides")loadMyRides()});
+  $(tab).addEventListener("click",()=>{$(panel).classList.remove("hidden");$(other).classList.add("hidden");$("messages-panel").classList.add("hidden");$("tab-messages").classList.remove("active");$("tab-dispatch").classList.toggle("active",tab==="tab-dispatch");$("tab-my-rides").classList.toggle("active",tab==="tab-my-rides");if(tab==="tab-my-rides")loadMyRides()});
 }
 async function loadMyRides(){
   const note=$("my-rides-notice"),list=$("my-rides-list");
@@ -58,3 +58,54 @@ const statuses=["pending","confirmed","assigned","on_the_way","arrived","boarded
 const price=el("input");price.type="number";price.min="0";price.step="0.01";price.value=trip.price_cents==null?"":(trip.price_cents/100).toFixed(2);price.placeholder="Not set";td(row,price);
 const driver=select([["","Unassigned"],...drivers.map(d=>[d.id,d.display_name+" ("+d.role+", "+d.username+")"])],trip.assigned_driver_id||"");td(row,driver);
 const save=el("button","Save");save.addEventListener("click",async()=>{save.disabled=true;try{const cents=price.value.trim()===""?null:Math.round(Number(price.value)*100);if(cents!==null&&(!Number.isSafeInteger(cents)||cents<0))throw Error("Invalid price");await api("/rest/v1/trips?id=eq."+encodeURIComponent(trip.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:status.value,price_cents:cents,assigned_driver_id:driver.value||null,updated_at:new Date().toISOString()})});msg("Ride updated.");}catch(err){msg(err.message,true)}finally{save.disabled=false}});td(row,save);body.append(row)}updateSelection();msg(trips.length+" ride(s) in selected view.");}catch(err){msg(err.message,true)}finally{refreshing=false}}
+
+let currentChatId=null,chatPoll=null;
+function chatNotice(message,isError=false){const node=$("chat-notice");node.textContent=message;node.className=isError?"error":"muted"}
+async function loadChatDirectory(){
+  const staff=await api("/rest/v1/rpc/chat_employee_directory",{method:"POST",body:"{}"});
+  const chooser=$("chat-employee"),previous=chooser.value;
+  chooser.replaceChildren(new Option("Select employee",""));
+  for(const person of staff)chooser.append(new Option(person.display_name+" ("+person.role+")",person.id));
+  chooser.value=previous;
+}
+async function loadChatMessages(){
+  if(!currentChatId||!token)return;
+  try{
+    const rows=await api("/rest/v1/chat_messages?select=id,sender_id,message_text,created_at&conversation_id=eq."+encodeURIComponent(currentChatId)+"&order=created_at.asc&limit=200");
+    const thread=$("chat-thread");thread.replaceChildren();
+    for(const message of rows){
+      const bubble=el("div");bubble.className="chat-bubble"+(message.sender_id===userId?" mine":"");
+      bubble.append(el("div",message.message_text),el("small",(message.sender_id===userId?"You":"Colleague")+" · "+new Date(message.created_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"short",timeStyle:"short"})));
+      thread.append(bubble);
+    }
+    if(!rows.length)thread.append(el("p","No messages yet. Say hello!"));
+    thread.scrollTop=thread.scrollHeight;
+    chatNotice("Conversation ready.");
+  }catch(e){chatNotice(e.message,true)}
+}
+$("tab-messages").addEventListener("click",async()=>{
+  $("dispatch-panel").classList.add("hidden");$("my-rides-panel").classList.add("hidden");$("messages-panel").classList.remove("hidden");
+  for(const id of ["tab-dispatch","tab-my-rides","tab-messages"])$(id).classList.toggle("active",id==="tab-messages");
+  try{await loadChatDirectory();await loadChatMessages()}catch(e){chatNotice(e.message,true)}
+  if(chatPoll)clearInterval(chatPoll);
+  chatPoll=setInterval(()=>{if(token&&!$("messages-panel").classList.contains("hidden"))loadChatMessages()},8000);
+});
+$("open-chat").addEventListener("click",async()=>{
+  const other=$("chat-employee").value;if(!other){chatNotice("Select an employee first.",true);return}
+  $("open-chat").disabled=true;
+  try{
+    const id=await api("/rest/v1/rpc/open_private_chat",{method:"POST",body:JSON.stringify({p_other_user_id:other})});
+    if(!id)throw Error("Unable to open conversation");
+    currentChatId=id;$("chat-form").classList.remove("hidden");await loadChatMessages();
+  }catch(e){chatNotice(e.message,true)}finally{$("open-chat").disabled=false}
+});
+$("refresh-messages").addEventListener("click",loadChatMessages);
+$("chat-form").addEventListener("submit",async e=>{
+  e.preventDefault();if(!currentChatId||!token)return;
+  const value=$("chat-text").value.trim();if(!value)return;
+  $("chat-send").disabled=true;
+  try{
+    await api("/rest/v1/chat_messages",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({conversation_id:currentChatId,sender_id:userId,message_text:value})});
+    $("chat-text").value="";await loadChatMessages();
+  }catch(err){chatNotice(err.message,true)}finally{$("chat-send").disabled=false}
+});
