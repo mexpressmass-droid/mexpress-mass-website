@@ -34,7 +34,7 @@ async function restoreView(){
      $("chat-employee").value=saved.chat_employee;
      try{
       const id=await api("/rest/v1/rpc/open_private_chat",{method:"POST",body:JSON.stringify({p_other_user_id:saved.chat_employee})});
-      if(id===saved.chat_id){currentChatId=id;chatRenderedId=null;chatLastMessageId=null;chatLatestTimestamp=null;$("chat-form").classList.remove("hidden");await loadChatMessages()}
+      if(id===saved.chat_id){currentChatId=id;chatRenderedId=null;chatLastMessageId=null;chatLatestTimestamp=null;chatOtherReadAt=null;$("chat-form").classList.remove("hidden");await loadChatMessages()}
      }catch(e){chatNotice(e.message,true)}
     }
    }
@@ -101,7 +101,7 @@ const price=el("input");price.type="number";price.min="0";price.step="0.01";pric
 const driver=select([["","Unassigned"],...drivers.map(d=>[d.id,d.display_name+" ("+d.role+", "+d.username+")"])],trip.assigned_driver_id||"");td(row,driver);
 const save=el("button","Save");save.addEventListener("click",async()=>{save.disabled=true;try{const cents=price.value.trim()===""?null:Math.round(Number(price.value)*100);if(cents!==null&&(!Number.isSafeInteger(cents)||cents<0))throw Error("Invalid price");await api("/rest/v1/trips?id=eq."+encodeURIComponent(trip.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:status.value,price_cents:cents,assigned_driver_id:driver.value||null,updated_at:new Date().toISOString()})});msg("Ride updated.");}catch(err){msg(err.message,true)}finally{save.disabled=false}});td(row,save);body.append(row)}updateSelection();msg(trips.length+" ride(s) in selected view.");}catch(err){msg(err.message,true)}finally{refreshing=false}}
 
-let currentChatId=null,chatPoll=null,chatRenderedId=null,chatLastMessageId=null,chatLoading=false,chatForceBottom=false,chatLatestTimestamp=null;
+let currentChatId=null,chatPoll=null,chatRenderedId=null,chatLastMessageId=null,chatLoading=false,chatForceBottom=false,chatLatestTimestamp=null,chatOtherReadAt=null;
 const CHAT_BOTTOM_THRESHOLD=75;
 const chatImageCache=new Map();
 function clearChatImages(){for(const url of chatImageCache.values())URL.revokeObjectURL(url);chatImageCache.clear()}
@@ -157,6 +157,17 @@ async function getChatReadPosition(id){
  const rows=await api("/rest/v1/chat_read_positions?select=last_read_at&conversation_id=eq."+encodeURIComponent(id)+"&user_id=eq."+encodeURIComponent(userId)+"&limit=1");
  return rows[0]?.last_read_at||null;
 }
+async function getOtherReadPosition(id){
+ const rows=await api("/rest/v1/chat_read_positions?select=user_id,last_read_at&conversation_id=eq."+encodeURIComponent(id)+"&user_id=neq."+encodeURIComponent(userId)+"&order=last_read_at.desc&limit=1");
+ return rows[0]?.last_read_at||null;
+}
+function updateChatReceiptIndicators(){
+ for(const node of $("chat-thread").querySelectorAll("[data-chat-sent-at]")){
+  const read=chatOtherReadAt&&new Date(chatOtherReadAt)>=new Date(node.dataset.chatSentAt);
+  node.textContent=read?"✓✓ Read":"✓ Sent";
+  node.title=read?"Read by recipient":"Sent to server; not yet marked as read";
+ }
+}
 async function markChatRead(id,createdAt){
  if(!createdAt||id!==currentChatId||document.hidden)return;
  try{
@@ -173,11 +184,14 @@ async function loadChatMessages(){
   const newConversation=chatRenderedId!==id;
   const oldAtBottom=thread.scrollHeight-thread.scrollTop-thread.clientHeight<CHAT_BOTTOM_THRESHOLD;
   const previousScrollTop=thread.scrollTop;
-  const [rows,readAt]=await Promise.all([
+  const [rows,readAt,otherReadAt]=await Promise.all([
    api("/rest/v1/chat_messages?select=id,sender_id,message_text,attachment_path,attachment_name,attachment_type,created_at&conversation_id=eq."+encodeURIComponent(id)+"&order=created_at.asc&limit=200"),
-   newConversation?getChatReadPosition(id):Promise.resolve(null)
+   newConversation?getChatReadPosition(id):Promise.resolve(null),
+   getOtherReadPosition(id)
   ]);
   if(currentChatId!==id)return;
+  chatOtherReadAt=otherReadAt;
+  updateChatReceiptIndicators();
   const latestId=rows.at(-1)?.id||null;
   const changed=newConversation||chatLastMessageId!==latestId;
   if(!changed&&!chatForceBottom)return;
@@ -192,7 +206,12 @@ async function loadChatMessages(){
     const link=el("button");link.type="button";link.className="chat-image-button";link.title="View photo";link.append(img);link.addEventListener("click",()=>{if(img.src)openChatLightbox(img.src)});
     bubble.append(link);loadPrivateImage(message.attachment_path,img).catch(()=>{img.replaceWith(el("small","Photo unavailable"))});
    }
-   bubble.append(el("small",(message.sender_id===userId?"You":"Colleague")+" · "+new Date(message.created_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"short",timeStyle:"short"})));
+   const meta=el("small",(message.sender_id===userId?"You":"Colleague")+" · "+new Date(message.created_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"short",timeStyle:"short"}));
+   if(message.sender_id===userId){
+    meta.append(document.createTextNode(" · "));
+    const receipt=el("span");receipt.dataset.chatSentAt=message.created_at;receipt.textContent=otherReadAt&&new Date(otherReadAt)>=new Date(message.created_at)?"✓✓ Read":"✓ Sent";receipt.title=receipt.textContent==="✓✓ Read"?"Read by recipient":"Sent to server; not yet marked as read";meta.append(receipt);
+   }
+   bubble.append(meta);
    thread.append(bubble);
   }
   if(!rows.length)thread.append(el("p","No messages yet. Say hello!"));
