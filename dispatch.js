@@ -16,7 +16,7 @@ async function refreshSession(){if(!refreshToken)throw Error("Session expired");
 async function verifyStaff(){const profile=await api("/rest/v1/driver_profiles?select=role&id=eq."+encodeURIComponent(userId));if(!["admin","dispatcher"].includes(profile[0]?.role))throw Error("This account is not authorized for dispatch.")}
 function showDashboard(){$("login-panel").classList.add("hidden");$("dashboard").classList.remove("hidden");$("logout").classList.remove("hidden");$("password").value=""}
 async function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");if(!saved?.refresh_token||!saved?.user_id)return;token=saved.access_token;refreshToken=saved.refresh_token;userId=saved.user_id;sessionExpiresAt=saved.expires_at||0;if(Date.now()>sessionExpiresAt-120000)await refreshSession();else scheduleSessionRefresh();await verifyStaff();showDashboard();await load()}catch(e){reset()}}
-function reset(){clearChatImages();$("chat-file").value="";$("chat-file-name").textContent="";if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=null;localStorage.removeItem(SESSION_KEY);refreshToken=null;sessionExpiresAt=0;if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();token=null;userId=null;drivers=[];$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
+function reset(){clearChatImages();closeChatLightbox();selectedChatFile=null;$("chat-file").value="";$("chat-camera-file").value="";$("chat-file-name").textContent="";if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=null;localStorage.removeItem(SESSION_KEY);refreshToken=null;sessionExpiresAt=0;if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();token=null;userId=null;drivers=[];$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
 $("login-form").addEventListener("submit",async e=>{e.preventDefault();$("login-error").textContent="";$("login-button").disabled=true;try{const r=await api("/auth/v1/token?grant_type=password",{method:"POST",body:JSON.stringify({email:$("email").value.trim(),password:$("password").value})});storeSession(r);await verifyStaff();showDashboard();await load()}catch(err){reset();$("login-error").textContent=err.message}finally{$("login-button").disabled=false}});
 $("logout").addEventListener("click",()=>{const oldToken=token;reset();if(oldToken)fetch(BASE+"/auth/v1/logout",{method:"POST",headers:{"apikey":KEY,"Authorization":"Bearer "+oldToken}}).catch(()=>{})});$("refresh").addEventListener("click",load);
 $("refresh-my-rides").addEventListener("click",loadMyRides);
@@ -95,7 +95,17 @@ async function uploadChatImage(file){
   if(!r.ok){let error;try{error=await r.json()}catch{}throw Error(error?.message||error?.error||"Photo upload failed ("+r.status+")")}
   return path;
 }
-$("chat-file").addEventListener("change",()=>{$("chat-file-name").textContent=$("chat-file").files[0]?.name||""});
+let selectedChatFile=null;
+$("chat-choose").addEventListener("click",()=>{$("chat-file").click()});
+$("chat-camera").addEventListener("click",()=>{$("chat-camera-file").click()});
+function selectChatFile(input){const file=input.files[0];if(!file)return;selectedChatFile=file;$("chat-file-name").textContent=file.name||"Photo ready";if(input.id==="chat-file")$("chat-camera-file").value="";else $("chat-file").value=""}
+$("chat-file").addEventListener("change",()=>selectChatFile($("chat-file")));
+$("chat-camera-file").addEventListener("change",()=>selectChatFile($("chat-camera-file")));
+function closeChatLightbox(){$("chat-lightbox").classList.add("hidden");$("chat-lightbox-image").removeAttribute("src")}
+$("chat-lightbox-close").addEventListener("click",closeChatLightbox);
+$("chat-lightbox").addEventListener("click",e=>{if(e.target===$("chat-lightbox"))closeChatLightbox()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeChatLightbox()});
+function openChatLightbox(url){$("chat-lightbox-image").src=url;$("chat-lightbox").classList.remove("hidden")}
 
 function chatNotice(message,isError=false){const node=$("chat-notice");node.textContent=message;node.className=isError?"error":"muted"}
 async function loadChatDirectory(){
@@ -115,7 +125,7 @@ async function loadChatMessages(){
       if(message.message_text){const body=el("div");appendLinkedText(body,message.message_text);bubble.append(body)}
       if(message.attachment_path){
         const img=el("img");img.className="chat-image";img.alt=message.attachment_name||"Chat photo";img.loading="lazy";
-        const link=el("a");link.href="#";link.append(img);link.addEventListener("click",e=>{e.preventDefault();if(img.src)window.open(img.src,"_blank","noopener,noreferrer")});
+        const link=el("button");link.type="button";link.className="chat-image-button";link.title="View photo";link.append(img);link.addEventListener("click",()=>{if(img.src)openChatLightbox(img.src)});
         bubble.append(link);loadPrivateImage(message.attachment_path,img).catch(()=>{img.replaceWith(el("small","Photo unavailable"))});
       }
       bubble.append(el("small",(message.sender_id===userId?"You":"Colleague")+" · "+new Date(message.created_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"short",timeStyle:"short"})));
@@ -145,12 +155,12 @@ $("open-chat").addEventListener("click",async()=>{
 $("refresh-messages").addEventListener("click",loadChatMessages);
 $("chat-form").addEventListener("submit",async e=>{
   e.preventDefault();if(!currentChatId||!token)return;
-  const value=$("chat-text").value.trim(),file=$("chat-file").files[0];if(!value&&!file)return;
+  const value=$("chat-text").value.trim(),file=selectedChatFile;if(!value&&!file)return;
   $("chat-send").disabled=true;
   try{
     const attachment_path=file?await uploadChatImage(file):null;
     await api("/rest/v1/chat_messages",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({conversation_id:currentChatId,sender_id:userId,message_text:value,attachment_path,attachment_name:file?.name||null,attachment_type:file?.type||null})});
-    $("chat-text").value="";$("chat-file").value="";$("chat-file-name").textContent="";await loadChatMessages();
+    $("chat-text").value="";$("chat-file").value="";$("chat-camera-file").value="";selectedChatFile=null;$("chat-file-name").textContent="";await loadChatMessages();
   }catch(err){chatNotice(err.message,true)}finally{$("chat-send").disabled=false}
 });
 
