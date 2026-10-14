@@ -47,7 +47,7 @@ let sessionRefreshTimer=null,refreshToken=null,sessionExpiresAt=0;
 function storeSession(auth){token=auth.access_token;refreshToken=auth.refresh_token;userId=auth.user?.id||userId;sessionExpiresAt=Date.now()+(Number(auth.expires_in)||3600)*1000;localStorage.setItem(SESSION_KEY,JSON.stringify({access_token:token,refresh_token:refreshToken,user_id:userId,expires_at:sessionExpiresAt}));scheduleSessionRefresh()}
 function scheduleSessionRefresh(){if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=setTimeout(()=>refreshSession().catch(()=>reset()),Math.max(1000,sessionExpiresAt-Date.now()-120000))}
 async function refreshSession(){if(!refreshToken)throw Error("Session expired");const auth=await api("/auth/v1/token?grant_type=refresh_token",{method:"POST",body:JSON.stringify({refresh_token:refreshToken})});storeSession(auth);return auth}
-async function verifyStaff(){const profile=await api("/rest/v1/driver_profiles?select=role&id=eq."+encodeURIComponent(userId));if(!["admin","dispatcher","driver"].includes(profile[0]?.role))throw Error("This account is not authorized for M Express.");staffRole=profile[0].role;$("tab-dispatch").classList.toggle("hidden",staffRole==="driver");$("dispatch-panel").classList.toggle("hidden",staffRole==="driver");$("tab-employees").classList.toggle("hidden",!["admin","dispatcher"].includes(staffRole));$("employee-admin-tools").classList.toggle("hidden",staffRole!=="admin")}
+async function verifyStaff(){const profile=await api("/rest/v1/driver_profiles?select=role&id=eq."+encodeURIComponent(userId));if(!["admin","dispatcher","driver"].includes(profile[0]?.role))throw Error("This account is not authorized for M Express.");staffRole=profile[0].role;$("tab-dispatch").classList.toggle("hidden",staffRole==="driver");$("dispatch-panel").classList.toggle("hidden",staffRole==="driver");$("tab-employees").classList.toggle("hidden",!["admin","dispatcher"].includes(staffRole));$("employee-admin-tools").classList.toggle("hidden",staffRole!=="admin");$("create-role").value="driver";$("create-role").querySelector('option[value="dispatcher"]').hidden=staffRole!=="admin"}
 function showDashboard(){$("login-panel").classList.add("hidden");$("dashboard").classList.remove("hidden");$("logout").classList.remove("hidden");$("password").value=""}
 async function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");if(!saved?.refresh_token||!saved?.user_id)return;token=saved.access_token;refreshToken=saved.refresh_token;userId=saved.user_id;sessionExpiresAt=saved.expires_at||0;if(Date.now()>sessionExpiresAt-120000)await refreshSession();else scheduleSessionRefresh();await verifyStaff();showDashboard();if(staffRole==="driver"){$("tab-my-rides").click();await loadMyRides()}else{await restoreView();await load()}}catch(e){reset()}}
 function reset(){closeAttachMenu();$("password").type="password";$("toggle-password").textContent="Show";$("toggle-password").setAttribute("aria-label","Show password");$("toggle-password").setAttribute("aria-pressed","false");clearChatImages();closeChatLightbox();selectedChatFile=null;$("chat-file").value="";$("chat-camera-file").value="";$("chat-file-name").textContent="";if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=null;localStorage.removeItem(SESSION_KEY);localStorage.removeItem(VIEW_KEY);refreshToken=null;sessionExpiresAt=0;if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;chatRenderedId=null;chatLastMessageId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();staffRole=null;token=null;userId=null;drivers=[];$("tab-employees").classList.add("hidden");$("employees-panel").classList.add("hidden");$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
@@ -351,8 +351,21 @@ async function employeeAdminRequest(payload){
 function employeeNotice(message,bad=false){const n=$("employee-password-notice");n.textContent=message;n.className=bad?"error":"success"}
 async function loadEmployees(){
  const result=await employeeAdminRequest({action:"list"});
- for(const id of ["employee-select","employee-username-select"]){const select=$(id);select.replaceChildren(new Option("Select employee",""));for(const p of result.employees||[])if(p.id!==userId)select.append(new Option(p.display_name+" ("+p.username+" · "+p.role+")",p.id))}
+ const picker=$("manage-employee"),previous=picker.value;
+ picker.replaceChildren(new Option("Select employee",""));
+ for(const p of result.employees||[])if(p.id!==userId)picker.append(new Option(p.display_name+" ("+p.username+" · "+p.role+")",p.id));
+ picker.value=previous;
+ syncEmployeeManagement();
 }
+function syncEmployeeManagement(){
+ const id=$("manage-employee").value,action=$("manage-action").value;
+ $("employee-select").value=id;$("employee-username-select").value=id;
+ $("manage-username-panel").classList.toggle("hidden",!id||action!=="username");
+ $("manage-password-panel").classList.toggle("hidden",!id||action!=="password");
+}
+$("manage-employee").addEventListener("change",syncEmployeeManagement);
+$("manage-action").addEventListener("change",syncEmployeeManagement);
+
 $("tab-employees").addEventListener("click",async()=>{
  if(!["admin","dispatcher"].includes(staffRole))return;
  for(const id of ["dispatch-panel","my-rides-panel","messages-panel"])$(id).classList.add("hidden");
@@ -360,18 +373,18 @@ $("tab-employees").addEventListener("click",async()=>{
  for(const id of ["tab-dispatch","tab-my-rides","tab-messages","tab-employees"])$(id).classList.toggle("active",id==="tab-employees");
  if(chatPoll)clearInterval(chatPoll);chatPoll=null;
  saveView();
- if(staffRole==="admin"){try{await loadEmployees()}catch(e){employeeNotice(e.message,true)}await loadEmployeeAudit()}
+ try{await loadEmployees()}catch(e){employeeNotice(e.message,true)}if(staffRole==="admin")await loadEmployeeAudit()
 });
 $("employee-create-form").addEventListener("submit",async e=>{
  e.preventDefault();if(!["admin","dispatcher"].includes(staffRole))return;
  const notice=$("create-driver-notice"),button=$("create-driver-button");
- button.disabled=true;notice.textContent="Creating driver...";notice.className="muted";
+ button.disabled=true;notice.textContent="Creating employee...";notice.className="muted";
  try{
   const username=$("create-username").value.trim().toLowerCase();
-  await employeeAdminRequest({action:"create_driver",username,display_name:$("create-display-name").value.trim(),password:$("create-password").value});
-  notice.textContent="Driver created. Sign in with username: "+username;notice.className="success";
+  await employeeAdminRequest({action:"create_employee",role:staffRole==="admin"?$("create-role").value:"driver",username,display_name:$("create-display-name").value.trim(),password:$("create-password").value});
+  notice.textContent="Employee created. Sign in with username: "+username;notice.className="success";
   $("employee-create-form").reset();await load();
-  if(staffRole==="admin")await loadEmployees();
+  await loadEmployees();
  }catch(err){notice.textContent=err.message;notice.className="error"}finally{button.disabled=false}
 });
 async function loadEmployeeAudit(){
@@ -391,7 +404,7 @@ async function loadEmployeeAudit(){
 }
 $("employee-audit-refresh").addEventListener("click",loadEmployeeAudit);
 $("employee-username-form").addEventListener("submit",async e=>{
- e.preventDefault();if(staffRole!=="admin")return;
+ e.preventDefault();if(!["admin","dispatcher"].includes(staffRole))return;
  const target=$("employee-username-select").value,username=$("employee-new-username").value.trim().toLowerCase(),notice=$("employee-username-notice");
  if(!target){notice.textContent="Select employee";notice.className="error";return}
  if(!/^[a-z][a-z0-9._-]{2,31}$/.test(username)){notice.textContent="Invalid username";notice.className="error";return}
@@ -406,7 +419,7 @@ $("employee-show-password").addEventListener("click",()=>{
  input.type=visible?"text":"password";$("employee-show-password").textContent=visible?"Hide":"Show";
 });
 $("employee-password-form").addEventListener("submit",async e=>{
- e.preventDefault();if(staffRole!=="admin")return;
+ e.preventDefault();if(!["admin","dispatcher"].includes(staffRole))return;
  const user=$("employee-select").value,password=$("employee-new-password").value,confirm=$("employee-confirm-password").value;
  if(!user){employeeNotice("Select an employee.",true);return}
  if(password.length<12){employeeNotice("Password must contain at least 12 characters.",true);return}
