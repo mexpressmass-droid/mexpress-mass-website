@@ -185,7 +185,7 @@ async function loadChatMessages(){
   let firstUnread=null;
   for(const message of rows){
    const bubble=el("div");bubble.className="chat-bubble"+(message.sender_id===userId?" mine":"");
-   if(newConversation&&readAt&&message.sender_id!==userId&&new Date(message.created_at)>new Date(readAt)&&!firstUnread)firstUnread=bubble;
+   if(newConversation&&message.sender_id!==userId&&(!readAt||new Date(message.created_at)>new Date(readAt))&&!firstUnread)firstUnread=bubble;
    if(message.message_text){const body=el("div");appendLinkedText(body,message.message_text);bubble.append(body)}
    if(message.attachment_path){
     const img=el("img");img.className="chat-image";img.alt=message.attachment_name||"Chat photo";img.loading="lazy";
@@ -197,9 +197,9 @@ async function loadChatMessages(){
   }
   if(!rows.length)thread.append(el("p","No messages yet. Say hello!"));
   chatRenderedId=id;chatLastMessageId=latestId;chatLatestTimestamp=rows.at(-1)?.created_at||null;
-  const scrollBottom=()=>{thread.scrollTop=thread.scrollHeight};
+  const scrollBottom=()=>{thread.scrollTop=thread.scrollHeight-thread.clientHeight};
   if(newConversation){
-   if(firstUnread)thread.scrollTop=Math.max(0,firstUnread.offsetTop-thread.offsetTop-12);
+   if(firstUnread){const target=firstUnread.getBoundingClientRect(),box=thread.getBoundingClientRect();thread.scrollTop+=target.top-box.top-10}
    else scrollBottom();
   }else if(chatForceBottom||oldAtBottom)scrollBottom();
   else thread.scrollTop=previousScrollTop;
