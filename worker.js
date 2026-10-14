@@ -1,5 +1,29 @@
 import { onRequestPost } from "./functions/api/ride-request.js";
 const SUPABASE="https://mmdolkwclsctvwtxnqtc.supabase.co";
+async function staffLogin(request,env){
+ const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{"Content-Type":"application/json","Cache-Control":"no-store"}});
+ if(request.method!=="POST")return reply({error:"Method not allowed"},405);
+ if(!env.SUPABASE_SERVICE_ROLE_KEY)return reply({error:"Authentication unavailable"},503);
+ const data=await request.json().catch(()=>null);
+ const login=data?.login?.trim()?.toLowerCase(),password=data?.password;
+ if(typeof login!=="string"||login.length>150||typeof password!=="string"||!password)return reply({error:"Invalid credentials"},401);
+ let email=login;
+ if(!login.includes("@")){
+  if(!/^[a-z][a-z0-9._-]{2,31}$/.test(login))return reply({error:"Invalid credentials"},401);
+  const key=env.SUPABASE_SERVICE_ROLE_KEY;
+  const result=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&username=eq."+encodeURIComponent(login)+"&limit=1",{headers:{"apikey":key,"Authorization":"Bearer "+key}});
+  if(!result.ok)return reply({error:"Authentication unavailable"},503);
+  const profiles=await result.json();
+  if(!profiles.length)return reply({error:"Invalid credentials"},401);
+  const user=await fetch(SUPABASE+"/auth/v1/admin/users/"+encodeURIComponent(profiles[0].id),{headers:{"apikey":key,"Authorization":"Bearer "+key}});
+  if(!user.ok)return reply({error:"Invalid credentials"},401);
+  email=(await user.json()).email;
+  if(!email)return reply({error:"Invalid credentials"},401);
+ }
+ const response=await fetch(SUPABASE+"/auth/v1/token?grant_type=password",{method:"POST",headers:{"apikey":"sb_publishable_Ha7bHx3pq6b342tU_VNnTw_a0hefysO","Content-Type":"application/json"},body:JSON.stringify({email,password})});
+ if(!response.ok)return reply({error:"Invalid credentials"},401);
+ return reply(await response.json());
+}
 async function employeeAdmin(request,env){
  const headers={"Content-Type":"application/json","Cache-Control":"no-store"};
  const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
@@ -16,14 +40,35 @@ async function employeeAdmin(request,env){
   const profile=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=role&id=eq."+encodeURIComponent(user.id)+"&limit=1",{headers:serviceHeaders});
   if(!profile.ok)return reply({error:"Authorization lookup failed"},502);
   const rows=await profile.json();
-  if(rows[0]?.role!=="admin")return reply({error:"Administrator access required"},403);
+  const staffRole=rows[0]?.role;
+  if(!["admin","dispatcher"].includes(staffRole))return reply({error:"Staff access required"},403);
   const body=await request.json().catch(()=>null);
   if(!body||typeof body!=="object")return reply({error:"Invalid request"},400);
   if(body.action==="list"){
+   if(staffRole!=="admin")return reply({error:"Administrator access required"},403);
    const result=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id,username,display_name,role&order=role.asc,username.asc",{headers:serviceHeaders});
    if(!result.ok)return reply({error:"Unable to load employees"},502);
    return reply({employees:await result.json()});
   }
+  if(body.action==="create_driver"){
+   const username=body.username,displayName=body.display_name,password=body.password;
+   if(typeof username!=="string"||!/^[a-z][a-z0-9._-]{2,31}$/.test(username))return reply({error:"Invalid username"},400);
+   if(typeof displayName!=="string"||!displayName.trim()||displayName.length>100)return reply({error:"Invalid driver name"},400);
+   if(typeof password!=="string"||password.length<12||password.length>128)return reply({error:"Password must contain 12–128 characters"},400);
+   const existing=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&username=eq."+encodeURIComponent(username)+"&limit=1",{headers:serviceHeaders});
+   if(!existing.ok)return reply({error:"Username check failed"},502);
+   if((await existing.json()).length)return reply({error:"Username already in use"},409);
+   const created=await fetch(SUPABASE+"/auth/v1/admin/users",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json"},body:JSON.stringify({email:username+"@auth.mexpress-mass.com",password,email_confirm:true})});
+   if(!created.ok)return reply({error:"Could not create authentication account (username may be taken)"},502);
+   const newUser=await created.json();
+   const inserted=await fetch(SUPABASE+"/rest/v1/driver_profiles",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({id:newUser.id,username,display_name:displayName.trim(),role:"driver"})});
+   if(!inserted.ok){
+    await fetch(SUPABASE+"/auth/v1/admin/users/"+encodeURIComponent(newUser.id),{method:"DELETE",headers:serviceHeaders});
+    return reply({error:"Could not create driver profile; authentication account cleanup attempted"},502);
+   }
+   return reply({success:true,user_id:newUser.id});
+  }
+  if(staffRole!=="admin")return reply({error:"Administrator access required"},403);
   if(body.action==="change_username"){
    const target=body.user_id,username=body.username;
    if(typeof target!=="string"||!/^[0-9a-f-]{36}$/i.test(target))return reply({error:"Select an employee"},400);
@@ -67,6 +112,7 @@ async function employeeAdmin(request,env){
 export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
+    if(url.pathname==="/api/dispatch/login")return staffLogin(request,env);
     if(url.pathname==="/api/dispatch/admin/employees")return employeeAdmin(request,env);
     if(url.pathname==="/api/ride-request"){
       if(request.method!=="POST") return new Response("Method not allowed",{status:405,headers:{Allow:"POST"}});
