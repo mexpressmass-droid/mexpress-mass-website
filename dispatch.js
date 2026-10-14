@@ -34,7 +34,7 @@ async function restoreView(){
      $("chat-employee").value=saved.chat_employee;
      try{
       const id=await api("/rest/v1/rpc/open_private_chat",{method:"POST",body:JSON.stringify({p_other_user_id:saved.chat_employee})});
-      if(id===saved.chat_id){currentChatId=id;$("chat-form").classList.remove("hidden");await loadChatMessages()}
+      if(id===saved.chat_id){currentChatId=id;chatRenderedId=null;chatLastMessageId=null;$("chat-form").classList.remove("hidden");await loadChatMessages()}
      }catch(e){chatNotice(e.message,true)}
     }
    }
@@ -49,7 +49,7 @@ async function refreshSession(){if(!refreshToken)throw Error("Session expired");
 async function verifyStaff(){const profile=await api("/rest/v1/driver_profiles?select=role&id=eq."+encodeURIComponent(userId));if(!["admin","dispatcher"].includes(profile[0]?.role))throw Error("This account is not authorized for dispatch.")}
 function showDashboard(){$("login-panel").classList.add("hidden");$("dashboard").classList.remove("hidden");$("logout").classList.remove("hidden");$("password").value=""}
 async function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");if(!saved?.refresh_token||!saved?.user_id)return;token=saved.access_token;refreshToken=saved.refresh_token;userId=saved.user_id;sessionExpiresAt=saved.expires_at||0;if(Date.now()>sessionExpiresAt-120000)await refreshSession();else scheduleSessionRefresh();await verifyStaff();showDashboard();await restoreView();await load()}catch(e){reset()}}
-function reset(){closeAttachMenu();$("password").type="password";$("toggle-password").textContent="Show";$("toggle-password").setAttribute("aria-label","Show password");$("toggle-password").setAttribute("aria-pressed","false");clearChatImages();closeChatLightbox();selectedChatFile=null;$("chat-file").value="";$("chat-camera-file").value="";$("chat-file-name").textContent="";if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=null;localStorage.removeItem(SESSION_KEY);localStorage.removeItem(VIEW_KEY);refreshToken=null;sessionExpiresAt=0;if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();token=null;userId=null;drivers=[];$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
+function reset(){closeAttachMenu();$("password").type="password";$("toggle-password").textContent="Show";$("toggle-password").setAttribute("aria-label","Show password");$("toggle-password").setAttribute("aria-pressed","false");clearChatImages();closeChatLightbox();selectedChatFile=null;$("chat-file").value="";$("chat-camera-file").value="";$("chat-file-name").textContent="";if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=null;localStorage.removeItem(SESSION_KEY);localStorage.removeItem(VIEW_KEY);refreshToken=null;sessionExpiresAt=0;if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;chatRenderedId=null;chatLastMessageId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();token=null;userId=null;drivers=[];$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
 $("login-form").addEventListener("submit",async e=>{e.preventDefault();$("login-error").textContent="";$("login-button").disabled=true;try{const r=await api("/auth/v1/token?grant_type=password",{method:"POST",body:JSON.stringify({email:$("email").value.trim(),password:$("password").value})});storeSession(r);await verifyStaff();showDashboard();localStorage.removeItem(VIEW_KEY);await load()}catch(err){reset();$("login-error").textContent=err.message}finally{$("login-button").disabled=false}});
 $("toggle-password").addEventListener("click",()=>{const input=$("password"),visible=input.type==="password";input.type=visible?"text":"password";$("toggle-password").textContent=visible?"Hide":"Show";$("toggle-password").setAttribute("aria-label",visible?"Hide password":"Show password");$("toggle-password").setAttribute("aria-pressed",String(visible))});
 $("logout").addEventListener("click",()=>{const oldToken=token;reset();if(oldToken)fetch(BASE+"/auth/v1/logout",{method:"POST",headers:{"apikey":KEY,"Authorization":"Bearer "+oldToken}}).catch(()=>{})});$("refresh").addEventListener("click",load);
@@ -101,7 +101,8 @@ const price=el("input");price.type="number";price.min="0";price.step="0.01";pric
 const driver=select([["","Unassigned"],...drivers.map(d=>[d.id,d.display_name+" ("+d.role+", "+d.username+")"])],trip.assigned_driver_id||"");td(row,driver);
 const save=el("button","Save");save.addEventListener("click",async()=>{save.disabled=true;try{const cents=price.value.trim()===""?null:Math.round(Number(price.value)*100);if(cents!==null&&(!Number.isSafeInteger(cents)||cents<0))throw Error("Invalid price");await api("/rest/v1/trips?id=eq."+encodeURIComponent(trip.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:status.value,price_cents:cents,assigned_driver_id:driver.value||null,updated_at:new Date().toISOString()})});msg("Ride updated.");}catch(err){msg(err.message,true)}finally{save.disabled=false}});td(row,save);body.append(row)}updateSelection();msg(trips.length+" ride(s) in selected view.");}catch(err){msg(err.message,true)}finally{refreshing=false}}
 
-let currentChatId=null,chatPoll=null;
+let currentChatId=null,chatPoll=null,chatRenderedId=null,chatLastMessageId=null,chatLoading=false,chatForceBottom=false;
+const CHAT_BOTTOM_THRESHOLD=75;
 const chatImageCache=new Map();
 function clearChatImages(){for(const url of chatImageCache.values())URL.revokeObjectURL(url);chatImageCache.clear()}
 function appendLinkedText(target,value){
@@ -152,27 +153,76 @@ async function loadChatDirectory(){
   for(const person of staff)chooser.append(new Option(person.display_name+" ("+person.role+")",person.id));
   chooser.value=previous;
 }
-async function loadChatMessages(){
-  if(!currentChatId||!token)return;
-  try{
-    const rows=await api("/rest/v1/chat_messages?select=id,sender_id,message_text,attachment_path,attachment_name,attachment_type,created_at&conversation_id=eq."+encodeURIComponent(currentChatId)+"&order=created_at.asc&limit=200");
-    const thread=$("chat-thread");thread.replaceChildren();
-    for(const message of rows){
-      const bubble=el("div");bubble.className="chat-bubble"+(message.sender_id===userId?" mine":"");
-      if(message.message_text){const body=el("div");appendLinkedText(body,message.message_text);bubble.append(body)}
-      if(message.attachment_path){
-        const img=el("img");img.className="chat-image";img.alt=message.attachment_name||"Chat photo";img.loading="lazy";
-        const link=el("button");link.type="button";link.className="chat-image-button";link.title="View photo";link.append(img);link.addEventListener("click",()=>{if(img.src)openChatLightbox(img.src)});
-        bubble.append(link);loadPrivateImage(message.attachment_path,img).catch(()=>{img.replaceWith(el("small","Photo unavailable"))});
-      }
-      bubble.append(el("small",(message.sender_id===userId?"You":"Colleague")+" · "+new Date(message.created_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"short",timeStyle:"short"})));
-      thread.append(bubble);
-    }
-    if(!rows.length)thread.append(el("p","No messages yet. Say hello!"));
-    thread.scrollTop=thread.scrollHeight;
-    chatNotice("Conversation ready.");
-  }catch(e){chatNotice(e.message,true)}
+async function getChatReadPosition(id){
+ const rows=await api("/rest/v1/chat_read_positions?select=last_read_at&conversation_id=eq."+encodeURIComponent(id)+"&user_id=eq."+encodeURIComponent(userId)+"&limit=1");
+ return rows[0]?.last_read_at||null;
 }
+async function markChatRead(id,createdAt){
+ if(!createdAt||id!==currentChatId||document.hidden)return;
+ try{
+  const old=await getChatReadPosition(id);
+  if(old&&new Date(old)>=new Date(createdAt))return;
+  await api("/rest/v1/chat_read_positions?on_conflict=conversation_id,user_id",{method:"POST",headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({conversation_id:id,user_id:userId,last_read_at:createdAt})});
+ }catch(e){console.warn("Could not update chat read position",e)}
+}
+async function loadChatMessages(){
+ if(!currentChatId||!token||chatLoading)return;
+ const id=currentChatId;chatLoading=true;
+ try{
+  const thread=$("chat-thread");
+  const newConversation=chatRenderedId!==id;
+  const oldAtBottom=thread.scrollHeight-thread.scrollTop-thread.clientHeight<CHAT_BOTTOM_THRESHOLD;
+  const previousScrollTop=thread.scrollTop;
+  const [rows,readAt]=await Promise.all([
+   api("/rest/v1/chat_messages?select=id,sender_id,message_text,attachment_path,attachment_name,attachment_type,created_at&conversation_id=eq."+encodeURIComponent(id)+"&order=created_at.asc&limit=200"),
+   newConversation?getChatReadPosition(id):Promise.resolve(null)
+  ]);
+  if(currentChatId!==id)return;
+  const latestId=rows.at(-1)?.id||null;
+  const changed=newConversation||chatLastMessageId!==latestId;
+  if(!changed&&!chatForceBottom)return;
+  thread.replaceChildren();
+  let firstUnread=null;
+  for(const message of rows){
+   const bubble=el("div");bubble.className="chat-bubble"+(message.sender_id===userId?" mine":"");
+   if(newConversation&&readAt&&message.sender_id!==userId&&new Date(message.created_at)>new Date(readAt)&&!firstUnread)firstUnread=bubble;
+   if(message.message_text){const body=el("div");appendLinkedText(body,message.message_text);bubble.append(body)}
+   if(message.attachment_path){
+    const img=el("img");img.className="chat-image";img.alt=message.attachment_name||"Chat photo";img.loading="lazy";
+    const link=el("button");link.type="button";link.className="chat-image-button";link.title="View photo";link.append(img);link.addEventListener("click",()=>{if(img.src)openChatLightbox(img.src)});
+    bubble.append(link);loadPrivateImage(message.attachment_path,img).catch(()=>{img.replaceWith(el("small","Photo unavailable"))});
+   }
+   bubble.append(el("small",(message.sender_id===userId?"You":"Colleague")+" · "+new Date(message.created_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"short",timeStyle:"short"})));
+   thread.append(bubble);
+  }
+  if(!rows.length)thread.append(el("p","No messages yet. Say hello!"));
+  chatRenderedId=id;chatLastMessageId=latestId;
+  const scrollBottom=()=>{thread.scrollTop=thread.scrollHeight};
+  if(newConversation){
+   if(firstUnread)thread.scrollTop=Math.max(0,firstUnread.offsetTop-thread.offsetTop-12);
+   else scrollBottom();
+  }else if(chatForceBottom||oldAtBottom)scrollBottom();
+  else thread.scrollTop=previousScrollTop;
+  const atBottom=thread.scrollHeight-thread.scrollTop-thread.clientHeight<CHAT_BOTTOM_THRESHOLD;
+  if(atBottom&&rows.length)markChatRead(id,rows.at(-1).created_at);
+  else if(newConversation&&firstUnread){
+   // Opening unread messages marks them read once they are shown.
+   const lastVisible=[...thread.querySelectorAll(".chat-bubble")].filter(b=>b.offsetTop-thread.offsetTop<thread.scrollTop+thread.clientHeight).at(-1);
+   const idx=lastVisible?[...thread.querySelectorAll(".chat-bubble")].indexOf(lastVisible):-1;
+   if(idx>=0)markChatRead(id,rows[idx].created_at);
+  }
+  chatForceBottom=false;
+  chatNotice("Conversation ready.");
+ }catch(e){chatNotice(e.message,true)}finally{chatLoading=false}
+}
+$("chat-thread").addEventListener("scroll",()=>{
+ const thread=$("chat-thread");
+ if(thread.scrollHeight-thread.scrollTop-thread.clientHeight<CHAT_BOTTOM_THRESHOLD&&currentChatId&&chatLastMessageId){
+  // Read positions are also updated on refresh when scrolled to the latest message.
+  getChatReadPosition(currentChatId).then(()=>loadChatMessages()).catch(()=>{});
+ }
+},{passive:true});
+
 $("tab-messages").addEventListener("click",async()=>{
   $("dispatch-panel").classList.add("hidden");$("my-rides-panel").classList.add("hidden");$("messages-panel").classList.remove("hidden");
   for(const id of ["tab-dispatch","tab-my-rides","tab-messages"])$(id).classList.toggle("active",id==="tab-messages");
@@ -186,7 +236,7 @@ $("open-chat").addEventListener("click",async()=>{
   try{
     const id=await api("/rest/v1/rpc/open_private_chat",{method:"POST",body:JSON.stringify({p_other_user_id:other})});
     if(!id)throw Error("Unable to open conversation");
-    currentChatId=id;$("chat-form").classList.remove("hidden");saveView();await loadChatMessages();
+    currentChatId=id;chatRenderedId=null;chatLastMessageId=null;$("chat-form").classList.remove("hidden");saveView();await loadChatMessages();
   }catch(e){chatNotice(e.message,true)}finally{$("open-chat").disabled=false}
 });
 $("refresh-messages").addEventListener("click",loadChatMessages);
@@ -197,7 +247,7 @@ $("chat-form").addEventListener("submit",async e=>{
   try{
     const attachment_path=file?await uploadChatImage(file):null;
     await api("/rest/v1/chat_messages",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({conversation_id:currentChatId,sender_id:userId,message_text:value,attachment_path,attachment_name:file?.name||null,attachment_type:file?.type||null})});
-    $("chat-text").value="";$("chat-file").value="";$("chat-camera-file").value="";selectedChatFile=null;$("chat-file-name").textContent="";await loadChatMessages();
+    $("chat-text").value="";$("chat-file").value="";$("chat-camera-file").value="";selectedChatFile=null;$("chat-file-name").textContent="";chatForceBottom=true;await loadChatMessages();
   }catch(err){chatNotice(err.message,true)}finally{$("chat-send").disabled=false}
 });
 
