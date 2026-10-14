@@ -117,4 +117,5 @@ $("chat-form").addEventListener("submit",async e=>{
     $("chat-text").value="";await loadChatMessages();
   }catch(err){chatNotice(err.message,true)}finally{$("chat-send").disabled=false}
 });
-\nrestoreSession();\n
+
+restoreSession();
