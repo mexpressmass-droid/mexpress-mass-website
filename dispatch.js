@@ -148,6 +148,35 @@ async function loadMyRides(){
   }catch(e){note.textContent=e.message}finally{rideRefreshBusy=false}
 }
 setInterval(()=>{if(token&&staffRole==="driver"&&!document.hidden)loadMyRides()},8000);
+
+// Dispatchers and administrators can create rides without accessing the Supabase service key.
+$("create-ride-toggle").addEventListener("click",()=>{
+ const panel=$("create-ride-panel");panel.classList.toggle("hidden");
+ if(!panel.classList.contains("hidden")){
+  const chooser=$("new-driver"),current=chooser.value;
+  chooser.replaceChildren(new Option("Unassigned",""));
+  for(const d of drivers.filter(d=>d.role==="driver"))chooser.append(new Option(d.display_name||d.username,d.id));
+  chooser.value=current;
+ }
+});
+$("create-ride-cancel").addEventListener("click",()=>$("create-ride-panel").classList.add("hidden"));
+$("create-ride-form").addEventListener("submit",async event=>{
+ event.preventDefault();
+ const submit=$("create-ride-submit"),notice=$("create-ride-notice");
+ submit.disabled=true;notice.textContent="Creating ride...";
+ try{
+  const local=$("new-pickup-time").value;
+  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local))throw Error("Enter a valid pickup date and time");
+  // datetime-local uses the browser's local zone; drivers in Boston normally use Eastern Time.
+  const payload={action:"create_ride",passenger_name:$("new-passenger").value,passenger_phone:$("new-phone").value,passenger_email:$("new-email").value,pickup_at:new Date(local).toISOString(),pickup_address:$("new-pickup-address").value,dropoff_address:$("new-dropoff-address").value,trip_type:$("new-trip-type").value,assigned_driver_id:$("new-driver").value,wheelchair_required:$("new-wheelchair").value==="yes",notes:$("new-notes").value};
+  const r=await fetch("/api/dispatch/admin/employees",{method:"POST",headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  const result=await r.json().catch(()=>({}));
+  if(!r.ok)throw Error(result.error||"Unable to create ride");
+  $("create-ride-form").reset();$("create-ride-panel").classList.add("hidden");
+  await load();msg("New ride created successfully.");
+ }catch(e){notice.textContent=e.message}finally{submit.disabled=false}
+});
+
 async function load(){if(refreshing)return;refreshing=true;msg("Loading...");try{drivers=await api("/rest/v1/driver_profiles?select=id,username,display_name,role&role=in.(admin,dispatcher,driver)&order=display_name.asc");const trips=(await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"})).filter(visibleTrip).sort((a,b)=>new Date(a.pickup_at)-new Date(b.pickup_at)).slice(0,200);const body=$("trips");body.replaceChildren();visibleTripIds=trips.map(t=>t.id);for(const id of [...selectedTripIds])if(!visibleTripIds.includes(id))selectedTripIds.delete(id);for(const trip of trips){const row=el("tr");row.className=tripColor(trip.status);const check=el("input");check.type="checkbox";check.className="trip-select";check.value=trip.id;check.checked=selectedTripIds.has(trip.id);check.setAttribute("aria-label","Select ride for "+trip.passenger_name);check.addEventListener("change",()=>{if(check.checked)selectedTripIds.add(trip.id);else selectedTripIds.delete(trip.id);updateSelection()});td(row,check);const date=el("span",new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"medium",timeStyle:"short"}));td(row,date);const passenger=el("div");passenger.append(el("strong",trip.passenger_name),el("small",trip.passenger_phone));if(trip.passenger_email)passenger.append(el("small",trip.passenger_email));td(row,passenger);const route=el("div");route.append(el("div",trip.pickup_address),el("small","→ "+trip.dropoff_address));td(row,route);const details=el("div",trip.trip_type.replaceAll("_"," "));details.append(el("small",trip.wheelchair_required?"Wheelchair":"No wheelchair"));if(trip.notes)details.append(el("small",trip.notes));td(row,details);
 const statuses=["pending","confirmed","assigned","on_the_way","arrived","boarded","completed","cancelled"];const status=select([...new Set([trip.status,...statuses])].map(v=>[v,v.replaceAll("_"," ")]),trip.status);td(row,status);
 const price=el("input");price.type="number";price.min="0";price.step="0.01";price.value=trip.price_cents==null?"":(trip.price_cents/100).toFixed(2);price.placeholder="Not set";td(row,price);
