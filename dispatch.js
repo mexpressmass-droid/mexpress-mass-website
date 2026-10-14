@@ -287,7 +287,7 @@ $("tab-employees").addEventListener("click",async()=>{
  for(const id of ["tab-dispatch","tab-my-rides","tab-messages","tab-employees"])$(id).classList.toggle("active",id==="tab-employees");
  if(chatPoll)clearInterval(chatPoll);chatPoll=null;
  saveView();
- if(staffRole==="admin")try{await loadEmployees()}catch(e){employeeNotice(e.message,true)}
+ if(staffRole==="admin"){try{await loadEmployees()}catch(e){employeeNotice(e.message,true)}await loadEmployeeAudit()}
 });
 $("employee-create-form").addEventListener("submit",async e=>{
  e.preventDefault();if(!["admin","dispatcher"].includes(staffRole))return;
@@ -301,6 +301,22 @@ $("employee-create-form").addEventListener("submit",async e=>{
   if(staffRole==="admin")await loadEmployees();
  }catch(err){notice.textContent=err.message;notice.className="error"}finally{button.disabled=false}
 });
+async function loadEmployeeAudit(){
+ if(staffRole!=="admin")return;
+ const log=$("employee-audit-log");log.textContent="Loading...";
+ try{
+  const data=await employeeAdminRequest({action:"audit_log"});
+  log.replaceChildren();
+  for(const event of data.events||[]){
+   const item=el("p");
+   const date=new Date(event.created_at).toLocaleString("en-US",{timeZone:"America/New_York"});
+   item.textContent=date+" · "+event.actor_role+" "+event.actor_id.slice(0,8)+" · "+event.action+" · "+event.target_id.slice(0,8)+" · "+JSON.stringify(event.details||{});
+   log.append(item);
+  }
+  if(!log.children.length)log.textContent="No employee changes recorded.";
+ }catch(e){log.textContent=e.message}
+}
+$("employee-audit-refresh").addEventListener("click",loadEmployeeAudit);
 $("employee-username-form").addEventListener("submit",async e=>{
  e.preventDefault();if(staffRole!=="admin")return;
  const target=$("employee-username-select").value,username=$("employee-new-username").value.trim().toLowerCase(),notice=$("employee-username-notice");
