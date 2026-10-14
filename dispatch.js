@@ -16,7 +16,7 @@ async function refreshSession(){if(!refreshToken)throw Error("Session expired");
 async function verifyStaff(){const profile=await api("/rest/v1/driver_profiles?select=role&id=eq."+encodeURIComponent(userId));if(!["admin","dispatcher"].includes(profile[0]?.role))throw Error("This account is not authorized for dispatch.")}
 function showDashboard(){$("login-panel").classList.add("hidden");$("dashboard").classList.remove("hidden");$("logout").classList.remove("hidden");$("password").value=""}
 async function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");if(!saved?.refresh_token||!saved?.user_id)return;token=saved.access_token;refreshToken=saved.refresh_token;userId=saved.user_id;sessionExpiresAt=saved.expires_at||0;if(Date.now()>sessionExpiresAt-120000)await refreshSession();else scheduleSessionRefresh();await verifyStaff();showDashboard();await load()}catch(e){reset()}}
-function reset(){if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=null;localStorage.removeItem(SESSION_KEY);refreshToken=null;sessionExpiresAt=0;if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();token=null;userId=null;drivers=[];$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
+function reset(){clearChatImages();$("chat-file").value="";$("chat-file-name").textContent="";if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=null;localStorage.removeItem(SESSION_KEY);refreshToken=null;sessionExpiresAt=0;if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();token=null;userId=null;drivers=[];$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
 $("login-form").addEventListener("submit",async e=>{e.preventDefault();$("login-error").textContent="";$("login-button").disabled=true;try{const r=await api("/auth/v1/token?grant_type=password",{method:"POST",body:JSON.stringify({email:$("email").value.trim(),password:$("password").value})});storeSession(r);await verifyStaff();showDashboard();await load()}catch(err){reset();$("login-error").textContent=err.message}finally{$("login-button").disabled=false}});
 $("logout").addEventListener("click",()=>{const oldToken=token;reset();if(oldToken)fetch(BASE+"/auth/v1/logout",{method:"POST",headers:{"apikey":KEY,"Authorization":"Bearer "+oldToken}}).catch(()=>{})});$("refresh").addEventListener("click",load);
 $("refresh-my-rides").addEventListener("click",loadMyRides);
@@ -68,6 +68,35 @@ const driver=select([["","Unassigned"],...drivers.map(d=>[d.id,d.display_name+" 
 const save=el("button","Save");save.addEventListener("click",async()=>{save.disabled=true;try{const cents=price.value.trim()===""?null:Math.round(Number(price.value)*100);if(cents!==null&&(!Number.isSafeInteger(cents)||cents<0))throw Error("Invalid price");await api("/rest/v1/trips?id=eq."+encodeURIComponent(trip.id),{method:"PATCH",headers:{"Prefer":"return=minimal"},body:JSON.stringify({status:status.value,price_cents:cents,assigned_driver_id:driver.value||null,updated_at:new Date().toISOString()})});msg("Ride updated.");}catch(err){msg(err.message,true)}finally{save.disabled=false}});td(row,save);body.append(row)}updateSelection();msg(trips.length+" ride(s) in selected view.");}catch(err){msg(err.message,true)}finally{refreshing=false}}
 
 let currentChatId=null,chatPoll=null;
+const chatImageCache=new Map();
+function clearChatImages(){for(const url of chatImageCache.values())URL.revokeObjectURL(url);chatImageCache.clear()}
+function appendLinkedText(target,value){
+  const re=/https?:\/\/[^\s<>"]+/gi;let cursor=0;
+  for(const match of value.matchAll(re)){const start=match.index;target.append(document.createTextNode(value.slice(cursor,start)));const raw=match[0],url=raw.replace(/[.,;!?)]*$/,"");try{const parsed=new URL(url);if(["https:","http:"].includes(parsed.protocol)){const a=el("a",url);a.href=parsed.href;a.target="_blank";a.rel="noopener noreferrer";target.append(a)}else target.append(document.createTextNode(url))}catch{target.append(document.createTextNode(url))}target.append(document.createTextNode(raw.slice(url.length)));cursor=start+raw.length}
+  target.append(document.createTextNode(value.slice(cursor)));
+}
+async function loadPrivateImage(path,img){
+  if(chatImageCache.has(path)){img.src=chatImageCache.get(path);return}
+  const r=await fetch(BASE+"/storage/v1/object/authenticated/chat-attachments/"+path.split("/").map(encodeURIComponent).join("/"),{headers:{"apikey":KEY,"Authorization":"Bearer "+token},cache:"no-store"});
+  if(!r.ok)throw Error("Unable to load image ("+r.status+")");
+  const blob=await r.blob();if(!blob.type.startsWith("image/"))throw Error("Invalid image type");
+  const url=URL.createObjectURL(blob);chatImageCache.set(path,url);img.src=url;
+}
+async function uploadChatImage(file){
+  const allowed=["image/jpeg","image/png","image/webp","image/heic","image/heif"];
+  const extension=(file.name.split(".").pop()||"").toLowerCase();
+  const types={jpg:"image/jpeg",jpeg:"image/jpeg",png:"image/png",webp:"image/webp",heic:"image/heic",heif:"image/heif"};
+  const mime=file.type||types[extension];
+  if(!allowed.includes(mime)||!types[extension]||types[extension]!==mime)throw Error("Choose a JPG, PNG, WebP or HEIC image.");
+  if(file.size>10*1024*1024)throw Error("Image must be 10 MB or smaller.");
+  if(!file.size)throw Error("The selected image is empty.");
+  const path=currentChatId+"/"+userId+"/"+crypto.randomUUID()+"."+extension;
+  const r=await fetch(BASE+"/storage/v1/object/chat-attachments/"+path,{method:"POST",headers:{"apikey":KEY,"Authorization":"Bearer "+token,"Content-Type":mime,"x-upsert":"false"},body:file});
+  if(!r.ok){let error;try{error=await r.json()}catch{}throw Error(error?.message||error?.error||"Photo upload failed ("+r.status+")")}
+  return path;
+}
+$("chat-file").addEventListener("change",()=>{$("chat-file-name").textContent=$("chat-file").files[0]?.name||""});
+
 function chatNotice(message,isError=false){const node=$("chat-notice");node.textContent=message;node.className=isError?"error":"muted"}
 async function loadChatDirectory(){
   const staff=await api("/rest/v1/rpc/chat_employee_directory",{method:"POST",body:"{}"});
@@ -79,11 +108,17 @@ async function loadChatDirectory(){
 async function loadChatMessages(){
   if(!currentChatId||!token)return;
   try{
-    const rows=await api("/rest/v1/chat_messages?select=id,sender_id,message_text,created_at&conversation_id=eq."+encodeURIComponent(currentChatId)+"&order=created_at.asc&limit=200");
+    const rows=await api("/rest/v1/chat_messages?select=id,sender_id,message_text,attachment_path,attachment_name,attachment_type,created_at&conversation_id=eq."+encodeURIComponent(currentChatId)+"&order=created_at.asc&limit=200");
     const thread=$("chat-thread");thread.replaceChildren();
     for(const message of rows){
       const bubble=el("div");bubble.className="chat-bubble"+(message.sender_id===userId?" mine":"");
-      bubble.append(el("div",message.message_text),el("small",(message.sender_id===userId?"You":"Colleague")+" · "+new Date(message.created_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"short",timeStyle:"short"})));
+      if(message.message_text){const body=el("div");appendLinkedText(body,message.message_text);bubble.append(body)}
+      if(message.attachment_path){
+        const img=el("img");img.className="chat-image";img.alt=message.attachment_name||"Chat photo";img.loading="lazy";
+        const link=el("a");link.href="#";link.append(img);link.addEventListener("click",e=>{e.preventDefault();if(img.src)window.open(img.src,"_blank","noopener,noreferrer")});
+        bubble.append(link);loadPrivateImage(message.attachment_path,img).catch(()=>{img.replaceWith(el("small","Photo unavailable"))});
+      }
+      bubble.append(el("small",(message.sender_id===userId?"You":"Colleague")+" · "+new Date(message.created_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"short",timeStyle:"short"})));
       thread.append(bubble);
     }
     if(!rows.length)thread.append(el("p","No messages yet. Say hello!"));
@@ -110,11 +145,12 @@ $("open-chat").addEventListener("click",async()=>{
 $("refresh-messages").addEventListener("click",loadChatMessages);
 $("chat-form").addEventListener("submit",async e=>{
   e.preventDefault();if(!currentChatId||!token)return;
-  const value=$("chat-text").value.trim();if(!value)return;
+  const value=$("chat-text").value.trim(),file=$("chat-file").files[0];if(!value&&!file)return;
   $("chat-send").disabled=true;
   try{
-    await api("/rest/v1/chat_messages",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({conversation_id:currentChatId,sender_id:userId,message_text:value})});
-    $("chat-text").value="";await loadChatMessages();
+    const attachment_path=file?await uploadChatImage(file):null;
+    await api("/rest/v1/chat_messages",{method:"POST",headers:{"Prefer":"return=minimal"},body:JSON.stringify({conversation_id:currentChatId,sender_id:userId,message_text:value,attachment_path,attachment_name:file?.name||null,attachment_type:file?.type||null})});
+    $("chat-text").value="";$("chat-file").value="";$("chat-file-name").textContent="";await loadChatMessages();
   }catch(err){chatNotice(err.message,true)}finally{$("chat-send").disabled=false}
 });
 
