@@ -23,7 +23,8 @@ async function restoreView(){
  if(["active","history"].includes(saved.my_rides_tab)){myRidesTab=saved.my_rides_tab;$("my-active").classList.toggle("active",myRidesTab==="active");$("my-history").classList.toggle("active",myRidesTab==="history")}
  if(saved.tab==="my-rides"){$("tab-my-rides").click()}
  else if(saved.tab==="messages"){
-  await $("tab-messages").click();
+  $("tab-messages").click();
+  await loadChatDirectory();
   if(saved.chat_id&&saved.chat_employee&&Array.from($("chat-employee").options).some(o=>o.value===saved.chat_employee)){
    $("chat-employee").value=saved.chat_employee;
    try{const id=await api("/rest/v1/rpc/open_private_chat",{method:"POST",body:JSON.stringify({p_other_user_id:saved.chat_employee})});if(id===saved.chat_id){currentChatId=id;$("chat-form").classList.remove("hidden");await loadChatMessages()}}catch(e){chatNotice(e.message,true)}
