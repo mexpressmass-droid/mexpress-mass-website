@@ -355,6 +355,8 @@ async function loadEmployees(){
  picker.replaceChildren(new Option("Select employee",""));
  for(const p of result.employees||[])if(p.id!==userId)picker.append(new Option(p.display_name+" ("+p.username+" · "+p.role+")",p.id));
  picker.value=previous;
+ const audit=$("audit-person");audit.replaceChildren(new Option("All employees",""));
+ for(const employee of result.employees||[])audit.append(new Option(employee.display_name+" ("+employee.username+")",employee.id));
  syncEmployeeManagement();
 }
 function syncEmployeeManagement(){
