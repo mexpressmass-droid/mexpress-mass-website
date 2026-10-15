@@ -343,10 +343,18 @@ $("chat-form").addEventListener("submit",async e=>{
 });
 
 async function employeeAdminRequest(payload){
- const r=await fetch("/api/dispatch/admin/employees",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:JSON.stringify(payload),cache:"no-store"});
- let data;try{data=await r.json()}catch{throw Error("Invalid server response ("+r.status+")")}
- if(!r.ok)throw Error(data.error||"Request failed ("+r.status+")");
- return data;
+ async function send(){
+  const r=await fetch("/api/dispatch/admin/employees",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:JSON.stringify(payload),cache:"no-store"});
+  let data;try{data=await r.json()}catch{throw Error("Invalid server response ("+r.status+")")}
+  return {r,data};
+ }
+ let result=await send();
+ if(result.r.status===401){
+  try{await refreshSession()}catch{throw Error("Session expired. Please sign out and sign in again.")}
+  result=await send();
+ }
+ if(!result.r.ok)throw Error(result.data.error||"Request failed ("+result.r.status+")");
+ return result.data;
 }
 function employeeNotice(message,bad=false){const n=$("employee-password-notice");n.textContent=message;n.className=bad?"error":"success"}
 async function loadEmployees(){
