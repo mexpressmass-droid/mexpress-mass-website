@@ -390,18 +390,31 @@ $("employee-create-form").addEventListener("submit",async e=>{
 async function loadEmployeeAudit(){
  if(staffRole!=="admin")return;
  const log=$("employee-audit-log");log.textContent="Loading...";
+ const now=new Date(),period=$("audit-period").value;
+ const day=d=>new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(d);
+ const offset=n=>day(new Date(now.getTime()+n*86400000));
+ let from=day(now),to=from;
+ if(period==="yesterday")from=to=offset(-1);
+ if(period==="week")from=offset(-6);
+ if(period==="month")from=offset(-29);
+ if(period==="previous_month"){const first=new Date(from.slice(0,7)+"-01T12:00:00Z");to=day(new Date(first.getTime()-86400000));from=to.slice(0,7)+"-01"}
+ if(period==="custom"){from=$("audit-from").value||from;to=$("audit-to").value||to}
+ if(from>to){log.textContent="Invalid date range";return}
  try{
-  const data=await employeeAdminRequest({action:"audit_log"});
-  log.replaceChildren();
-  for(const event of data.events||[]){
-   const item=el("p");
-   const date=new Date(event.created_at).toLocaleString("en-US",{timeZone:"America/New_York"});
-   item.textContent=date+" · "+event.actor_role+" "+event.actor_id.slice(0,8)+" · "+event.action+" · "+event.target_id.slice(0,8)+" · "+JSON.stringify(event.details||{});
-   log.append(item);
+  const result=await employeeAdminRequest({action:"audit_log",actor_id:$("audit-person").value,actor_role:$("audit-role").value,action_filter:$("audit-action").value,limit:500,from:new Date(from+"T00:00:00Z").toISOString(),to:new Date(new Date(to+"T00:00:00Z").getTime()+2*86400000).toISOString()});
+  log.replaceChildren();let count=0;
+  for(const e of result.events||[]){
+   const date=new Date(e.created_at),localDay=day(date),clock=new Intl.DateTimeFormat("en-GB",{timeZone:"America/New_York",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(date);
+   if(localDay<from||localDay>to||clock<($("audit-start-time").value||"00:00")||clock>($("audit-end-time").value||"23:59"))continue;
+   const who=Array.from($("audit-person").options).find(o=>o.value===e.actor_id);
+   const item=el("p",localDay+" "+clock+" Boston · "+(who?who.textContent:e.actor_id.slice(0,8))+" · "+e.actor_role+" · "+e.action+" · "+JSON.stringify(e.details||{}));
+   item.style.padding="8px 0";item.style.borderBottom="1px solid #ddd";log.append(item);count++;
   }
-  if(!log.children.length)log.textContent="No employee changes recorded.";
+  $("audit-count").textContent=count+" events shown (latest 500 records maximum)";
+  if(!count)log.textContent="No events match your filters.";
  }catch(e){log.textContent=e.message}
 }
+
 $("employee-audit-refresh").addEventListener("click",loadEmployeeAudit);
 $("employee-username-form").addEventListener("submit",async e=>{
  e.preventDefault();if(!["admin","dispatcher"].includes(staffRole))return;
