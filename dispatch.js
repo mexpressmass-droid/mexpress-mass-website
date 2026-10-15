@@ -409,7 +409,32 @@ async function loadEmployeeAudit(){
    const date=new Date(e.created_at),localDay=day(date),clock=new Intl.DateTimeFormat("en-GB",{timeZone:"America/New_York",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(date);
    if(localDay<from||localDay>to||clock<($("audit-start-time").value||"00:00")||clock>($("audit-end-time").value||"23:59"))continue;
    const who=Array.from($("audit-person").options).find(o=>o.value===e.actor_id);
-   const item=el("p",localDay+" "+clock+" Boston · "+(who?who.textContent:e.actor_id.slice(0,8))+" · "+e.actor_role+" · "+e.action+" · "+JSON.stringify(e.details||{}));
+   const changes=e.details?.changes||{};
+   const labels={status:"Status",assigned_driver_id:"Assigned driver",pickup_at:"Pickup time",pickup_address:"Pickup address",dropoff_address:"Drop-off address",price_cents:"Price",internal_notes:"Internal comment",notes:"Ride notes"};
+   const show=(field,value)=>{
+    if(value===null||value===undefined||value==="")return "None";
+    if(field==="price_cents")return "$"+(Number(value)/100).toFixed(2);
+    if(field==="assigned_driver_id"){const driver=drivers.find(d=>d.id===value);return driver?.display_name||driver?.username||String(value).slice(0,8)}
+    if(field==="pickup_at")return new Date(value).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"medium",timeStyle:"short"});
+    return String(value);
+   };
+   const meaningful=["ride_changed","create_ride","create_driver","create_dispatcher","change_username","reset_password","delete_employee"].includes(e.action);
+   if(!meaningful)continue;
+   const lines=Object.entries(changes).map(([field,values])=>(labels[field]||field)+": "+show(field,values.before??values.old)+" → "+show(field,values.after??values.new));
+   if(!lines.length&&e.action==="ride_changed"){
+    for(const [field,label] of [["status","Status"],["driver","Assigned driver"],["pickup","Pickup time"]]){
+     const old=e.details?.["previous_"+field],next=e.details?.[field];
+     if(old!==undefined&&old!==next)lines.push(label+": "+show(field==="driver"?"assigned_driver_id":field==="pickup"?"pickup_at":field,old)+" → "+show(field==="driver"?"assigned_driver_id":field==="pickup"?"pickup_at":field,next));
+    }
+   }
+   const whoName=who?who.textContent:e.actor_id.slice(0,8);
+   const item=el("div");item.style.padding="12px 0";item.style.borderBottom="1px solid #ddd";
+   item.append(el("strong",localDay+" "+clock+" · "+whoName+" · "+e.actor_role));
+   const eventTitle={ride_changed:"Ride updated",create_ride:"Ride created",create_driver:"Driver account created",create_dispatcher:"Dispatcher account created",change_username:"Username changed",reset_password:"Password reset",delete_employee:"Employee deleted"}[e.action]||e.action;
+   item.append(el("div",eventTitle+(e.details?.ride_id?" · Ride "+String(e.details.ride_id).slice(0,8):"")));
+   for(const line of lines)item.append(el("div",line));
+   item.append(el("small","Source: "+(e.details?.source||"Web / database")));
+
    item.style.padding="8px 0";item.style.borderBottom="1px solid #ddd";log.append(item);count++;
   }
   $("audit-count").textContent=count+" events shown (latest 500 records maximum)";
@@ -446,22 +471,5 @@ $("employee-password-form").addEventListener("submit",async e=>{
   $("employee-new-password").value="";$("employee-confirm-password").value="";
   employeeNotice("Password updated. Share the new password privately with the employee.");
  }catch(err){employeeNotice(err.message,true)}finally{$("employee-save-password").disabled=false}
-});
-// Best-effort interface events; ride mutations are additionally audited by the database trigger.
-document.addEventListener("click",event=>{
- if(!token||!userId)return;
- const button=event.target.closest("button");
- if(!button)return;
- const label=(button.textContent||"").trim().toLowerCase();
- let name=null;
- if(button.id==="tab-employees")name="open_employee";
- else if(button.id==="tab-messages")name="view_messages";
- else if(button.id==="open-chat")name="view_messages";
- else if(button.id==="bulk-apply")name="ride_bulk_click";
- else if(button.id==="create-ride-submit")name="ride_save_click";
- else if(label.startsWith("mark "))name="ride_status_click";
- else if(label==="save")name="ride_save_click";
- if(!name)return;
- fetch("/api/dispatch/admin/employees",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:JSON.stringify({action:"record_activity",event:name})}).catch(()=>{});
 });
 restoreSession();
