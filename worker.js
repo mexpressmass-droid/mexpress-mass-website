@@ -27,7 +27,7 @@ async function staffLogin(request,env){
 async function logEmployeeEvent(env,user,role,action,target,details){
  const key=env.SUPABASE_SERVICE_ROLE_KEY;
  try{
-  const r=await fetch(SUPABASE+"/rest/v1/employee_audit_log",{method:"POST",headers:{"apikey":key,"Authorization":"Bearer "+key,"Content-Type":"application/json"},body:JSON.stringify({actor_id:user.id,actor_role:role,action,target_id:target,details})});
+  const r=await fetch(SUPABASE+"/rest/v1/employee_audit_log",{method:"POST",headers:{"apikey":key,"Authorization":"Bearer "+key,"Content-Type":"application/json"},body:JSON.stringify({actor_id:user.id,actor_role:role,action,target_id:target,details:{source:"web",...details}})});
   if(!r.ok)console.error("Employee audit insert failed",r.status);
  }catch(e){console.error("Employee audit insert failed")}
 }
@@ -58,9 +58,22 @@ async function employeeAdmin(request,env){
   }
   if(body.action==="audit_log"){
    if(staffRole!=="admin")return reply({error:"Administrator access required"},403);
-   const events=await fetch(SUPABASE+"/rest/v1/employee_audit_log?select=created_at,actor_id,actor_role,action,target_id,details&order=created_at.desc&limit=100",{headers:serviceHeaders});
+   const limit=Math.min(500,Math.max(1,Number(body.limit)||200));
+   const params=new URLSearchParams({select:"id,created_at,actor_id,actor_role,action,target_id,details",order:"created_at.desc",limit:String(limit)});
+   if(typeof body.actor_id==="string"&&/^[0-9a-f-]{36}$/i.test(body.actor_id))params.set("actor_id","eq."+body.actor_id);
+   if(["admin","dispatcher","driver"].includes(body.actor_role))params.set("actor_role","eq."+body.actor_role);
+   if(typeof body.action_filter==="string"&&/^[a-z_]{2,60}$/.test(body.action_filter))params.set("action","eq."+body.action_filter);
+   if(typeof body.from==="string"&&!isNaN(Date.parse(body.from)))params.set("created_at","gte."+new Date(body.from).toISOString());
+   if(typeof body.to==="string"&&!isNaN(Date.parse(body.to)))params.append("created_at","lte."+new Date(body.to).toISOString());
+   const events=await fetch(SUPABASE+"/rest/v1/employee_audit_log?"+params.toString(),{headers:serviceHeaders});
    if(!events.ok)return reply({error:"Activity log table is not configured yet"},503);
    return reply({events:await events.json()});
+  }
+  if(body.action==="record_activity"){
+   const allowed=["view_ride","open_ride","view_messages","send_message","open_employee","login","logout","ride_status_click","ride_save_click","ride_bulk_click"];
+   if(!allowed.includes(body.event))return reply({error:"Invalid activity"},400);
+   await logEmployeeEvent(env,user,staffRole,body.event,user.id,{source:"web",...((body.context&&typeof body.context==="object")?{context:String(body.context.value||"").slice(0,120)}:{})});
+   return reply({success:true});
   }
   if(body.action==="create_ride"){
    const fields=["passenger_name","passenger_phone","pickup_address","dropoff_address","pickup_at"];
@@ -78,6 +91,7 @@ async function employeeAdmin(request,env){
    const created=await fetch(SUPABASE+"/rest/v1/trips",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(record)});
    if(!created.ok){console.error("Ride creation failed",created.status,await created.text());return reply({error:"Unable to create ride"},502)}
    const rides=await created.json();
+   await logEmployeeEvent(env,user,staffRole,"create_ride",user.id,{source:"web",ride_id:rides[0]?.id,assigned_driver_id:record.assigned_driver_id||null});
    return reply({success:true,ride_id:rides[0]?.id},201);
   }
   if(body.action==="create_employee"||body.action==="create_driver"){
