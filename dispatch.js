@@ -49,9 +49,31 @@ function scheduleSessionRefresh(){if(sessionRefreshTimer)clearTimeout(sessionRef
 async function refreshSession(){if(!refreshToken)throw Error("Session expired");const auth=await api("/auth/v1/token?grant_type=refresh_token",{method:"POST",body:JSON.stringify({refresh_token:refreshToken})});storeSession(auth);return auth}
 async function verifyStaff(){const profile=await api("/rest/v1/driver_profiles?select=role&id=eq."+encodeURIComponent(userId));if(!["admin","dispatcher","driver"].includes(profile[0]?.role))throw Error("This account is not authorized for M Express.");staffRole=profile[0].role;$("tab-dispatch").classList.toggle("hidden",staffRole==="driver");$("dispatch-panel").classList.toggle("hidden",staffRole==="driver");$("tab-employees").classList.toggle("hidden",!["admin","dispatcher"].includes(staffRole));$("employee-admin-tools").classList.toggle("hidden",staffRole!=="admin");$("create-role").value="driver";$("create-role").querySelector('option[value="dispatcher"]').hidden=staffRole!=="admin"}
 function showDashboard(){$("login-panel").classList.add("hidden");$("dashboard").classList.remove("hidden");$("logout").classList.remove("hidden");$("password").value=""}
-async function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");if(!saved?.refresh_token||!saved?.user_id)return;token=saved.access_token;refreshToken=saved.refresh_token;userId=saved.user_id;sessionExpiresAt=saved.expires_at||0;if(Date.now()>sessionExpiresAt-120000)await refreshSession();else scheduleSessionRefresh();await verifyStaff();showDashboard();if(staffRole==="driver"){$("tab-my-rides").click();await loadMyRides()}else{await restoreView();await load()}}catch(e){reset()}}
+let loginInProgress=false;
+async function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");if(!saved?.refresh_token||!saved?.user_id)return;token=saved.access_token;refreshToken=saved.refresh_token;userId=saved.user_id;sessionExpiresAt=saved.expires_at||0;if(Date.now()>sessionExpiresAt-120000)await refreshSession();else scheduleSessionRefresh();await verifyStaff();showDashboard();if(staffRole==="driver"){$("tab-my-rides").click();await loadMyRides()}else{await restoreView();await load()}}catch(e){if(!loginInProgress)reset()}}
 function reset(){closeAttachMenu();$("password").type="password";$("toggle-password").textContent="Show";$("toggle-password").setAttribute("aria-label","Show password");$("toggle-password").setAttribute("aria-pressed","false");clearChatImages();closeChatLightbox();selectedChatFile=null;$("chat-file").value="";$("chat-camera-file").value="";$("chat-file-name").textContent="";if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=null;localStorage.removeItem(SESSION_KEY);localStorage.removeItem(VIEW_KEY);refreshToken=null;sessionExpiresAt=0;if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;chatRenderedId=null;chatLastMessageId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();staffRole=null;token=null;userId=null;drivers=[];$("tab-employees").classList.add("hidden");$("employees-panel").classList.add("hidden");$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
-$("login-form").addEventListener("submit",async e=>{e.preventDefault();$("login-error").textContent="";$("login-button").disabled=true;try{const response=await fetch("/api/dispatch/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({login:$("email").value.trim(),password:$("password").value})});const r=await response.json();if(!response.ok)throw Error(r.error||"Login failed");storeSession(r);await verifyStaff();showDashboard();localStorage.removeItem(VIEW_KEY);if(staffRole==="driver"){$("tab-my-rides").click();await loadMyRides()}else await load()}catch(err){const attemptedLogin=$("email").value;reset();$("email").value=attemptedLogin;$("login-error").textContent="Sign-in failed: "+(err?.message||"Unknown error")+". Please try again.";console.error("Dispatch sign-in failed",err)}finally{$("login-button").disabled=false}});
+$("login-form").addEventListener("submit",async e=>{
+ e.preventDefault();
+ if(loginInProgress)return;
+ loginInProgress=true;
+ const error=$("login-error"),button=$("login-button");
+ error.textContent="";button.disabled=true;
+ try{
+  const response=await fetch("/api/dispatch/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({login:$("email").value.trim(),password:$("password").value}),cache:"no-store"});
+  let result;try{result=await response.json()}catch{throw Error("Server returned an invalid response (HTTP "+response.status+")")}
+  if(!response.ok)throw Error(result.error||"Login failed (HTTP "+response.status+")");
+  storeSession(result);
+  await verifyStaff();
+  showDashboard();
+  localStorage.removeItem(VIEW_KEY);
+  if(staffRole==="driver"){$("tab-my-rides").click();await loadMyRides()}
+  else await load();
+ }catch(err){
+  error.textContent="Sign-in failed: "+(err?.message||"Unknown error");
+  console.error("Dispatch sign-in failed",err);
+  if(staffRole){$("dashboard").classList.remove("hidden");$("login-panel").classList.add("hidden")}
+ }finally{loginInProgress=false;button.disabled=false}
+});
 $("toggle-password").addEventListener("click",()=>{const input=$("password"),visible=input.type==="password";input.type=visible?"text":"password";$("toggle-password").textContent=visible?"Hide":"Show";$("toggle-password").setAttribute("aria-label",visible?"Hide password":"Show password");$("toggle-password").setAttribute("aria-pressed",String(visible))});
 $("logout").addEventListener("click",()=>{const oldToken=token;reset();if(oldToken)fetch(BASE+"/auth/v1/logout",{method:"POST",headers:{"apikey":KEY,"Authorization":"Bearer "+oldToken}}).catch(()=>{})});$("refresh").addEventListener("click",load);
 $("refresh-my-rides").addEventListener("click",loadMyRides);
