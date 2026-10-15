@@ -116,6 +116,21 @@ async function employeeAdmin(request,env){
    await logEmployeeEvent(env,user,staffRole,"create_"+role,newUser.id,{username,display_name:displayName.trim(),role});
    return reply({success:true,user_id:newUser.id});
   }
+  if(body.action==="deactivate_employee"){
+   const target=body.user_id;
+   if(typeof target!=="string"||!/^[0-9a-f-]{36}$/i.test(target))return reply({error:"Select an employee"},400);
+   if(target===user.id)return reply({error:"You cannot deactivate your own account"},400);
+   const profileRes=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id,role,username,display_name&id=eq."+encodeURIComponent(target)+"&limit=1",{headers:serviceHeaders});
+   if(!profileRes.ok)return reply({error:"Employee lookup failed"},502);
+   const profiles=await profileRes.json(),employee=profiles[0];
+   if(!employee)return reply({error:"Employee not found"},404);
+   if(employee.role==="admin")return reply({error:"Administrator accounts cannot be deactivated from Dispatch"},403);
+   if(staffRole!=="admin"&&employee.role!=="driver")return reply({error:"Dispatchers can only deactivate drivers"},403);
+   const banned=await fetch(SUPABASE+"/auth/v1/admin/users/"+encodeURIComponent(target),{method:"PUT",headers:{...serviceHeaders,"Content-Type":"application/json"},body:JSON.stringify({ban_duration:"876000h"})});
+   if(!banned.ok)return reply({error:"Unable to deactivate employee"},502);
+   await logEmployeeEvent(env,user,staffRole,"deactivate_employee",target,{username:employee.username,display_name:employee.display_name,role:employee.role});
+   return reply({success:true});
+  }
   if(body.action==="change_username"){
    const target=body.user_id,username=body.username;
    if(typeof target!=="string"||!/^[0-9a-f-]{36}$/i.test(target))return reply({error:"Select an employee"},400);
