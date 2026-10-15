@@ -427,10 +427,10 @@ async function loadEmployeeAudit(){
      if(old!==undefined&&old!==next)lines.push(label+": "+show(field==="driver"?"assigned_driver_id":field==="pickup"?"pickup_at":field,old)+" → "+show(field==="driver"?"assigned_driver_id":field==="pickup"?"pickup_at":field,next));
     }
    }
-   const whoName=who?who.textContent:e.actor_id.slice(0,8);
+   const known=drivers.find(d=>d.id===e.actor_id);const whoName=who?who.textContent:known?.display_name||known?.username||e.actor_id.slice(0,8);
    const item=el("div");item.style.padding="12px 0";item.style.borderBottom="1px solid #ddd";
    item.append(el("strong",localDay+" "+clock+" · "+whoName+" · "+e.actor_role));
-   const eventTitle={ride_changed:"Ride updated",create_ride:"Ride created",create_driver:"Driver account created",create_dispatcher:"Dispatcher account created",change_username:"Username changed",reset_password:"Password reset",delete_employee:"Employee deleted"}[e.action]||e.action;
+   const eventTitle={ride_changed:changes.status?"Ride status changed":"Ride updated",create_ride:"Ride created",create_driver:"Driver account created",create_dispatcher:"Dispatcher account created",change_username:"Username changed",reset_password:"Password reset",delete_employee:"Employee deleted"}[e.action]||e.action;
    item.append(el("div",eventTitle+(e.details?.ride_id?" · Ride "+String(e.details.ride_id).slice(0,8):"")));
    for(const line of lines)item.append(el("div",line));
    item.append(el("small","Source: "+(e.details?.source||"Web / database")));
