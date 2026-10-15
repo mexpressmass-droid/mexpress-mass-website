@@ -1,7 +1,7 @@
 // Browser only receives the Supabase publishable key; service-role credentials stay in Cloudflare.
 const BASE="https://mmdolkwclsctvwtxnqtc.supabase.co";
 const KEY="sb_publishable_Ha7bHx3pq6b342tU_VNnTw_a0hefysO";
-let staffRole=null,token=null,drivers=[],refreshing=false,userId=null,myRidesTab="active",selectedTripIds=new Set(),visibleTripIds=[];
+let employeeList=[],staffRole=null,token=null,drivers=[],refreshing=false,userId=null,myRidesTab="active",selectedTripIds=new Set(),visibleTripIds=[];
 const $=id=>document.getElementById(id);
 const msg=(s,bad=false)=>{const el=$("notice");el.textContent=s;el.className=bad?"error":"success"};
 async function api(path,opts={}){const r=await fetch(BASE+path,{...opts,headers:{"apikey":KEY,...(token?{"Authorization":"Bearer "+token}:{}),...(opts.body?{"Content-Type":"application/json"}:{}),...(opts.headers||{})},cache:"no-store"});if(!r.ok){let info;try{info=await r.json()}catch{}throw Error(info?.message||info?.error_description||info?.error||"Request failed ("+r.status+")")}if(r.status===204)return null;const raw=await r.text();if(!raw.trim())return null;try{return JSON.parse(raw)}catch{throw Error("Invalid server response (HTTP "+r.status+")")}}
@@ -351,6 +351,7 @@ async function employeeAdminRequest(payload){
 function employeeNotice(message,bad=false){const n=$("employee-password-notice");n.textContent=message;n.className=bad?"error":"success"}
 async function loadEmployees(){
  const result=await employeeAdminRequest({action:"list"});
+ employeeList=result.employees||[];
  const picker=$("manage-employee"),previous=picker.value;
  picker.replaceChildren(new Option("Select employee",""));
  for(const p of result.employees||[])if(p.id!==userId)picker.append(new Option(p.display_name+" ("+p.username+" · "+p.role+")",p.id));
@@ -364,9 +365,27 @@ function syncEmployeeManagement(){
  $("employee-select").value=id;$("employee-username-select").value=id;
  $("manage-username-panel").classList.toggle("hidden",!id||action!=="username");
  $("manage-password-panel").classList.toggle("hidden",!id||action!=="password");
+ $("manage-delete-panel").classList.toggle("hidden",!id||action!=="delete");
 }
 $("manage-employee").addEventListener("change",syncEmployeeManagement);
 $("manage-action").addEventListener("change",syncEmployeeManagement);
+$("employee-delete-button").addEventListener("click",async()=>{
+ const id=$("manage-employee").value;
+ const employee=employeeList.find(p=>p.id===id);
+ if(!employee||employee.role==="admin"||id===userId)return;
+ if(!confirm("Permanently delete login for "+employee.display_name+" ("+employee.username+")? Historical rides and messages will remain."))return;
+ const typed=prompt("To confirm, type the exact username: "+employee.username);
+ if(typed===null)return;
+ if(typed!==employee.username){employeeNotice("Username did not match. Nothing deleted.",true);return}
+ const button=$("employee-delete-button");button.disabled=true;
+ try{
+  await employeeAdminRequest({action:"delete_employee",user_id:id,confirm_username:typed});
+  employeeNotice("Employee login deleted. Historical records preserved.");
+  await loadEmployees();await load();
+ }catch(e){employeeNotice(e.message,true)}
+ finally{button.disabled=false}
+});
+
 
 $("tab-employees").addEventListener("click",async()=>{
  if(!["admin","dispatcher"].includes(staffRole))return;
