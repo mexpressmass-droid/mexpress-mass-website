@@ -393,7 +393,7 @@ async function loadEmployeeAudit(){
  if(staffRole!=="admin")return;
  const log=$("employee-audit-log");log.textContent="Loading...";
  const now=new Date(),period=$("audit-period").value;
- const day=d=>new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(d);
+ const day=d=>{const parts=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(d);const values=Object.fromEntries(parts.map(p=>[p.type,p.value]));return values.year+"-"+values.month+"-"+values.day};
  const offset=n=>day(new Date(now.getTime()+n*86400000));
  let from=day(now),to=from;
  if(period==="yesterday")from=to=offset(-1);
