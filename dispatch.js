@@ -365,7 +365,18 @@ function syncEmployeeManagement(){
  $("employee-select").value=id;$("employee-username-select").value=id;
  $("manage-username-panel").classList.toggle("hidden",!id||action!=="username");
  $("manage-password-panel").classList.toggle("hidden",!id||action!=="password");
+ $("manage-deactivate-panel").classList.toggle("hidden",!id||action!=="deactivate");
 }
+$("employee-deactivate").addEventListener("click",async()=>{
+ const id=$("manage-employee").value,notice=$("employee-deactivate-notice");
+ if(!id)return;
+ const option=$("manage-employee").selectedOptions[0],name=option?.textContent||"this employee";
+ if(!window.confirm("Deactivate "+name+"? This blocks new sign-ins but keeps trip and activity history."))return;
+ const button=$("employee-deactivate");button.disabled=true;notice.textContent="Deactivating...";
+ try{await employeeAdminRequest({action:"deactivate_employee",user_id:id});notice.textContent="Account deactivated. Existing sessions may remain valid until expiry.";await loadEmployees();await loadEmployeeAudit()}
+ catch(error){notice.textContent=error.message}
+ finally{button.disabled=false}
+});
 $("manage-employee").addEventListener("change",syncEmployeeManagement);
 $("manage-action").addEventListener("change",syncEmployeeManagement);
 
