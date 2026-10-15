@@ -175,7 +175,7 @@ function addressEditor(value,placeholder){
  const shown=el("span",value);shown.style.flex="1";shown.style.overflowWrap="anywhere";
  const field=el("input");field.type="text";field.value=value;field.maxLength=500;field.placeholder=placeholder;field.style.flex="1";field.style.minWidth="100px";field.classList.add("hidden");
  const edit=el("button","✎");edit.type="button";edit.title="Edit "+placeholder;edit.setAttribute("aria-label","Edit "+placeholder);edit.style.padding="2px 7px";edit.style.fontSize="15px";edit.style.lineHeight="1.3";edit.style.flexShrink="0";
- edit.addEventListener("click",()=>{const editing=field.classList.contains("hidden");if(editing){shown.classList.add("hidden");field.classList.remove("hidden");edit.textContent="✓";edit.title="Finish editing";field.focus();field.select()}else{shown.textContent=field.value;shown.classList.remove("hidden");field.classList.add("hidden");edit.textContent="✎";edit.title="Edit "+placeholder}});
+ edit.addEventListener("click",()=>{const editing=field.classList.contains("hidden");if(editing){shown.classList.add("hidden");field.classList.remove("hidden");edit.textContent="✓";edit.title="Finish editing";field.focus();field.select()}else{if(field.value!==shown.textContent&&!confirm("Confirm "+placeholder+" change?")){field.value=shown.textContent;field.focus();return}shown.textContent=field.value;shown.classList.remove("hidden");field.classList.add("hidden");edit.textContent="✎";edit.title="Edit "+placeholder}});
  wrap.append(shown,field,edit);route.append(wrap);return field;
 }
 const pickupInput=addressEditor(trip.pickup_address,"Pickup address");
