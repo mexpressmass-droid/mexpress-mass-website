@@ -447,4 +447,21 @@ $("employee-password-form").addEventListener("submit",async e=>{
   employeeNotice("Password updated. Share the new password privately with the employee.");
  }catch(err){employeeNotice(err.message,true)}finally{$("employee-save-password").disabled=false}
 });
+// Best-effort interface events; ride mutations are additionally audited by the database trigger.
+document.addEventListener("click",event=>{
+ if(!token||!userId)return;
+ const button=event.target.closest("button");
+ if(!button)return;
+ const label=(button.textContent||"").trim().toLowerCase();
+ let name=null;
+ if(button.id==="tab-employees")name="open_employee";
+ else if(button.id==="tab-messages")name="view_messages";
+ else if(button.id==="open-chat")name="view_messages";
+ else if(button.id==="bulk-apply")name="ride_bulk_click";
+ else if(button.id==="create-ride-submit")name="ride_save_click";
+ else if(label.startsWith("mark "))name="ride_status_click";
+ else if(label==="save")name="ride_save_click";
+ if(!name)return;
+ fetch("/api/dispatch/admin/employees",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:JSON.stringify({action:"record_activity",event:name})}).catch(()=>{});
+});
 restoreSession();
