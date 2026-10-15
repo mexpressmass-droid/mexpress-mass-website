@@ -11,7 +11,7 @@ async function staffLogin(request,env){
  if(!login.includes("@")){
   if(!/^[a-z][a-z0-9._-]{2,31}$/.test(login))return reply({error:"Invalid credentials"},401);
   const key=env.SUPABASE_SERVICE_ROLE_KEY;
-  const result=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&username=eq."+encodeURIComponent(login)+"&limit=1",{headers:{"apikey":key,"Authorization":"Bearer "+key}});
+  const result=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&is_active=eq.true&username=eq."+encodeURIComponent(login)+"&limit=1",{headers:{"apikey":key,"Authorization":"Bearer "+key}});
   if(!result.ok)return reply({error:"Authentication unavailable"},503);
   const profiles=await result.json();
   if(!profiles.length)return reply({error:"Invalid credentials"},401);
@@ -44,15 +44,15 @@ async function employeeAdmin(request,env){
   if(!auth.ok)return reply({error:"Invalid or expired session"},401);
   const user=await auth.json();
   if(!user.id)return reply({error:"Invalid session"},401);
-  const profile=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=role&id=eq."+encodeURIComponent(user.id)+"&limit=1",{headers:serviceHeaders});
+  const profile=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=role,is_active&id=eq."+encodeURIComponent(user.id)+"&limit=1",{headers:serviceHeaders});
   if(!profile.ok)return reply({error:"Authorization lookup failed"},502);
   const rows=await profile.json();
-  const staffRole=rows[0]?.role;
+  const staffRole=rows[0]?.is_active===true?rows[0]?.role:null;
   if(!["admin","dispatcher"].includes(staffRole))return reply({error:"Staff access required"},403);
   const body=await request.json().catch(()=>null);
   if(!body||typeof body!=="object")return reply({error:"Invalid request"},400);
   if(body.action==="list"){
-   const result=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id,username,display_name,role&order=role.asc,username.asc",{headers:serviceHeaders});
+   const result=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id,username,display_name,role,is_active&is_active=eq.true&order=role.asc,username.asc",{headers:serviceHeaders});
    if(!result.ok)return reply({error:"Unable to load employees"},502);
    return reply({employees:(await result.json()).filter(p=>staffRole==="admin"||p.role==="driver")});
   }
@@ -83,7 +83,7 @@ async function employeeAdmin(request,env){
    const record={passenger_name:body.passenger_name.trim(),passenger_phone:body.passenger_phone.trim(),passenger_email:typeof body.passenger_email==="string"?body.passenger_email.trim()||null:null,pickup_address:body.pickup_address.trim(),dropoff_address:body.dropoff_address.trim(),pickup_at:pickupDate.toISOString(),wheelchair_required:body.wheelchair_required===true,trip_type:["one_way","round_trip"].includes(body.trip_type)?body.trip_type:"one_way",notes:typeof body.notes==="string"?body.notes.slice(0,3000).trim()||null:null,status:"pending",source:"dispatch"};
    if(body.assigned_driver_id){
     if(typeof body.assigned_driver_id!=="string"||!/^[0-9a-f-]{36}$/i.test(body.assigned_driver_id))return reply({error:"Invalid driver"},400);
-    const driver=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&id=eq."+encodeURIComponent(body.assigned_driver_id)+"&role=eq.driver&limit=1",{headers:serviceHeaders});
+    const driver=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&id=eq."+encodeURIComponent(body.assigned_driver_id)+"&is_active=eq.true&role=eq.driver&limit=1",{headers:serviceHeaders});
     if(!driver.ok||!(await driver.json()).length)return reply({error:"Driver not found"},400);
     record.assigned_driver_id=body.assigned_driver_id;
     record.status="assigned";
@@ -115,6 +115,36 @@ async function employeeAdmin(request,env){
    }
    await logEmployeeEvent(env,user,staffRole,"create_"+role,newUser.id,{username,display_name:displayName.trim(),role});
    return reply({success:true,user_id:newUser.id});
+  }
+  if(body.action==="delete_employee"){
+   const target=body.user_id;
+   if(typeof target!=="string"||!/^[0-9a-f-]{36}$/i.test(target))return reply({error:"Select an employee"},400);
+   if(target===user.id)return reply({error:"You cannot delete your own account"},403);
+   const targetRes=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id,username,display_name,role,is_active&id=eq."+encodeURIComponent(target)+"&limit=1",{headers:serviceHeaders});
+   if(!targetRes.ok)return reply({error:"Employee lookup failed"},502);
+   const targetRows=await targetRes.json(),employee=targetRows[0];
+   if(!employee||!employee.is_active)return reply({error:"Active employee not found"},404);
+   if(employee.role==="admin")return reply({error:"Administrator accounts cannot be deleted"},403);
+   if(staffRole!=="admin"&&employee.role!=="driver")return reply({error:"Dispatchers can only delete drivers"},403);
+   if(body.confirm_username!==employee.username)return reply({error:"Username confirmation does not match"},400);
+   const authCheck=await fetch(SUPABASE+"/auth/v1/admin/users/"+encodeURIComponent(target),{headers:serviceHeaders});
+   if(!authCheck.ok)return reply({error:"Authentication account not found; no changes made"},409);
+   const original=await authCheck.json();
+   if(!String(original.email||"").toLowerCase().endsWith("@auth.mexpress-mass.com"))return reply({error:"This login is not a managed employee account"},403);
+   const deactivate=await fetch(SUPABASE+"/rest/v1/driver_profiles?id=eq."+encodeURIComponent(target),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({is_active:false})});
+   if(!deactivate.ok)return reply({error:"Unable to lock employee account"},502);
+   const locked=await deactivate.json();
+   if(locked.length!==1)return reply({error:"Unable to verify account lock"},502);
+   const deleted=await fetch(SUPABASE+"/auth/v1/admin/users/"+encodeURIComponent(target),{method:"DELETE",headers:serviceHeaders});
+   if(!deleted.ok){
+    await fetch(SUPABASE+"/rest/v1/driver_profiles?id=eq."+encodeURIComponent(target),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json"},body:JSON.stringify({is_active:true})});
+    return reply({error:"Authentication deletion failed. Account restoration attempted; contact administrator."},502);
+   }
+   const archiveUsername="archived_"+target.replace(/-/g,"").slice(0,24);
+   const renamed=await fetch(SUPABASE+"/rest/v1/driver_profiles?id=eq."+encodeURIComponent(target),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({username:archiveUsername})});
+   if(!renamed.ok)return reply({error:"Login deleted and history preserved, but username release failed. Contact administrator.",account_deleted:true},502);
+   await logEmployeeEvent(env,user,staffRole,"delete_employee",target,{username:employee.username,display_name:employee.display_name,role:employee.role});
+   return reply({success:true});
   }
   if(body.action==="change_username"){
    const target=body.user_id,username=body.username;
