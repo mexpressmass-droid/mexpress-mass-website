@@ -343,8 +343,9 @@ $("chat-form").addEventListener("submit",async e=>{
 });
 
 async function employeeAdminRequest(payload){
- const r=await fetch("/api/dispatch/admin/employees",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:JSON.stringify(payload),cache:"no-store"});
- let data;try{data=await r.json()}catch{throw Error("Invalid server response ("+r.status+")")}
+ if(refreshToken&&Date.now()>sessionExpiresAt-60000)await refreshSession();
+ let r=await fetch("/api/dispatch/admin/employees",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:JSON.stringify(payload),cache:"no-store"});
+ if(r.status===401&&refreshToken){try{await refreshSession();r=await fetch("/api/dispatch/admin/employees",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:JSON.stringify(payload),cache:"no-store"})}catch(e){reset();throw Error("Your session expired. Please sign in again.")}}\n let data;try{data=await r.json()}catch{throw Error("Invalid server response ("+r.status+")")}
  if(!r.ok)throw Error(data.error||"Request failed ("+r.status+")");
  return data;
 }
