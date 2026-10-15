@@ -401,13 +401,13 @@ async function loadEmployeeAudit(){
  if(period==="month")from=offset(-29);
  if(period==="previous_month"){const first=new Date(from.slice(0,7)+"-01T12:00:00Z");to=day(new Date(first.getTime()-86400000));from=to.slice(0,7)+"-01"}
  if(period==="custom"){from=$("audit-from").value||from;to=$("audit-to").value||to}
- if(from>to){log.textContent="Invalid date range";return}
+ if(period!=="all"&&from>to){log.textContent="Invalid date range";return}
  try{
-  const result=await employeeAdminRequest({action:"audit_log",actor_id:$("audit-person").value,actor_role:$("audit-role").value,action_filter:$("audit-action").value,limit:500,from:new Date(from+"T00:00:00Z").toISOString(),to:new Date(new Date(to+"T00:00:00Z").getTime()+2*86400000).toISOString()});
+  const result=await employeeAdminRequest({action:"audit_log",actor_id:$("audit-person").value,actor_role:$("audit-role").value,action_filter:$("audit-action").value,limit:500,from:period==="all"?"":new Date(from+"T00:00:00Z").toISOString(),to:period==="all"?"":new Date(new Date(to+"T00:00:00Z").getTime()+2*86400000).toISOString()});
   log.replaceChildren();let count=0;
   for(const e of result.events||[]){
    const date=new Date(e.created_at),localDay=day(date),clock=new Intl.DateTimeFormat("en-GB",{timeZone:"America/New_York",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(date);
-   if(localDay<from||localDay>to||clock<($("audit-start-time").value||"00:00")||clock>($("audit-end-time").value||"23:59"))continue;
+   if((period!=="all"&&(localDay<from||localDay>to))||clock<($("audit-start-time").value||"00:00")||clock>($("audit-end-time").value||"23:59"))continue;
    const who=Array.from($("audit-person").options).find(o=>o.value===e.actor_id);
    const changes=e.details?.changes||{};
    const labels={status:"Status",assigned_driver_id:"Assigned driver",pickup_at:"Pickup time",pickup_address:"Pickup address",dropoff_address:"Drop-off address",price_cents:"Price",internal_notes:"Internal comment",notes:"Ride notes"};
