@@ -75,6 +75,29 @@ async function employeeAdmin(request,env){
    await logEmployeeEvent(env,user,staffRole,body.event,user.id,{source:"web",...((body.context&&typeof body.context==="object")?{context:String(body.context.value||"").slice(0,120)}:{})});
    return reply({success:true});
   }
+  if(body.action==="update_ride"){
+   if(typeof body.ride_id!=="string"||!/^[0-9a-f-]{36}$/i.test(body.ride_id))return reply({error:"Invalid ride"},400);
+   const currentResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,status,assigned_driver_id,pickup_address,dropoff_address,price_cents,internal_notes&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
+   if(!currentResponse.ok)return reply({error:"Unable to load ride"},502);
+   const current=(await currentResponse.json())[0];
+   if(!current)return reply({error:"Ride not found"},404);
+   if(!["pending","confirmed","assigned","on_the_way","arrived","boarded","completed","cancelled"].includes(body.status))return reply({error:"Invalid status"},400);
+   for(const field of ["pickup_address","dropoff_address"])if(typeof body[field]!=="string"||!body[field].trim()||body[field].length>500)return reply({error:"Valid pickup and drop-off addresses are required"},400);
+   if(body.price_cents!==null&&(!Number.isSafeInteger(body.price_cents)||body.price_cents<0))return reply({error:"Invalid price"},400);
+   if(body.internal_notes!==null&&(typeof body.internal_notes!=="string"||body.internal_notes.length>4000))return reply({error:"Invalid internal notes"},400);
+   const driverId=body.assigned_driver_id||null;
+   if(driverId!==null&&(typeof driverId!=="string"||!/^[0-9a-f-]{36}$/i.test(driverId)))return reply({error:"Invalid driver"},400);
+   if(body.status==="pending"&&driverId!==null)return reply({error:"Pending rides cannot be assigned to a driver. Change the status first."},400);
+   if(driverId!==null&&driverId!==current.assigned_driver_id){
+    const driverResponse=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&id=eq."+encodeURIComponent(driverId)+"&role=eq.driver&is_active=eq.true&limit=1",{headers:serviceHeaders});
+    if(!driverResponse.ok||!(await driverResponse.json()).length)return reply({error:"Only active drivers can be assigned"},400);
+   }
+   const changes={status:body.status,pickup_address:body.pickup_address.trim(),dropoff_address:body.dropoff_address.trim(),price_cents:body.price_cents,assigned_driver_id:driverId,internal_notes:body.internal_notes,updated_at:new Date().toISOString()};
+   const saved=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(changes)});
+   if(!saved.ok)return reply({error:"Unable to save ride changes"},502);
+   await logEmployeeEvent(env,user,staffRole,"update_ride",user.id,{ride_id:body.ride_id,changes:{status:body.status,pickup_address:changes.pickup_address,dropoff_address:changes.dropoff_address,assigned_driver_id:driverId}});
+   return reply({success:true});
+  }
   if(body.action==="create_ride"){
    const fields=["passenger_name","passenger_phone","pickup_address","dropoff_address","pickup_at"];
    if(fields.some(k=>typeof body[k]!=="string"||!body[k].trim()||body[k].length>500))return reply({error:"Passenger, phone, addresses and pickup time are required"},400);
@@ -82,6 +105,7 @@ async function employeeAdmin(request,env){
    if(!Number.isFinite(pickupDate.getTime()))return reply({error:"Invalid pickup time"},400);
    const record={passenger_name:body.passenger_name.trim(),passenger_phone:body.passenger_phone.trim(),passenger_email:typeof body.passenger_email==="string"?body.passenger_email.trim()||null:null,pickup_address:body.pickup_address.trim(),dropoff_address:body.dropoff_address.trim(),pickup_at:pickupDate.toISOString(),wheelchair_required:body.wheelchair_required===true,trip_type:["one_way","round_trip"].includes(body.trip_type)?body.trip_type:"one_way",notes:typeof body.notes==="string"?body.notes.slice(0,3000).trim()||null:null,status:"pending",source:"dispatch"};
    if(body.assigned_driver_id){
+    return reply({error:"Pending rides cannot be assigned to a driver. Create the ride first, then change its status."},400);
     if(typeof body.assigned_driver_id!=="string"||!/^[0-9a-f-]{36}$/i.test(body.assigned_driver_id))return reply({error:"Invalid driver"},400);
     const driver=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&id=eq."+encodeURIComponent(body.assigned_driver_id)+"&is_active=eq.true&role=eq.driver&limit=1",{headers:serviceHeaders});
     if(!driver.ok||!(await driver.json()).length)return reply({error:"Driver not found"},400);
