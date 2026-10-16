@@ -89,6 +89,48 @@ function previewSelectedChanges(kind,value){
 $("bulk-status").addEventListener("change",()=>previewSelectedChanges("status",$("bulk-status").value));
 $("bulk-driver").addEventListener("change",()=>{if(!$("bulk-driver").disabled&&$("bulk-driver").value)previewSelectedChanges("driver",$("bulk-driver").value)});
 function updateSelection(){for(const row of $("trips").querySelectorAll("tr")){const box=row.querySelector(".trip-select");if(!box)continue;const active=selectedTripIds.has(box.value);box.checked=active;row.classList.toggle("ride-selected",active)}for(const option of $("bulk-status").options)if(option.value==="delete")option.hidden=staffRole!=="admin";const pendingSelected=[...selectedTripIds].some(id=>visibleTripStatuses.get(id)==="pending")||[...document.querySelectorAll(".trip-select:checked")].some(input=>visibleTripStatuses.get(input.value)==="pending");const bulkDriver=$("bulk-driver");bulkDriver.disabled=selectedTripIds.size===0||pendingSelected;bulkDriver.title=pendingSelected?"One or more selected rides are Pending. Confirm all Pending rides first.":selectedTripIds.size===0?"Select rides first.":"";if(bulkDriver.disabled)bulkDriver.value="";for(const option of bulkDriver.options){if(option.value)option.disabled=bulkDriver.disabled}const count=selectedTripIds.size;$("bulk-count").textContent=count+" selected";$("bulk-apply").disabled=count===0;$("bulk-clear").disabled=count===0;const all=visibleTripIds.length>0&&visibleTripIds.every(id=>selectedTripIds.has(id));$("bulk-all").checked=all;$("bulk-all").indeterminate=!all&&visibleTripIds.some(id=>selectedTripIds.has(id))}
+// Explorer-style rubber-band selection, only from blank table-cell space.
+let rideDrag=null;
+const dragSurface=$("trips");
+dragSurface.addEventListener("pointerdown",event=>{
+ if(event.button!==0||event.pointerType==="touch"||!(event.target instanceof Element))return;
+ // Only blank padding/background, never editable fields, links, text or controls.
+ if(!event.target.matches("td, tr"))return;
+ const row=event.target.closest("tr");if(!row||!row.querySelector(".trip-select"))return;
+ rideDrag={x:event.clientX,y:event.clientY,active:false,initial:new Set(selectedTripIds),additive:event.ctrlKey||event.metaKey,box:null};
+});
+document.addEventListener("pointermove",event=>{
+ if(!rideDrag)return;
+ const drag=rideDrag;
+ if(!drag.active&&Math.hypot(event.clientX-drag.x,event.clientY-drag.y)<7)return;
+ if(!drag.active){
+  drag.active=true;
+  drag.box=document.createElement("div");drag.box.className="ride-rubber-band";
+  document.body.append(drag.box);
+  document.body.classList.add("ride-dragging");
+ }
+ const left=Math.min(drag.x,event.clientX),top=Math.min(drag.y,event.clientY);
+ const right=Math.max(drag.x,event.clientX),bottom=Math.max(drag.y,event.clientY);
+ Object.assign(drag.box.style,{left:left+"px",top:top+"px",width:right-left+"px",height:bottom-top+"px"});
+ const next=drag.additive?new Set(drag.initial):new Set();
+ for(const row of dragSurface.querySelectorAll("tr")){
+  const rect=row.getBoundingClientRect(),check=row.querySelector(".trip-select");
+  if(check&&rect.right>left&&rect.left<right&&rect.bottom>top&&rect.top<bottom)next.add(check.value);
+ }
+ selectedTripIds.clear();for(const id of next)selectedTripIds.add(id);
+ updateSelection();
+});
+document.addEventListener("pointerup",()=>{
+ if(!rideDrag)return;
+ if(rideDrag.active){
+  suppressRideClick=true;
+  setTimeout(()=>{suppressRideClick=false},0);
+ }
+ rideDrag.box?.remove();document.body.classList.remove("ride-dragging");rideDrag=null;
+});
+document.addEventListener("pointercancel",()=>{rideDrag?.box?.remove();document.body.classList.remove("ride-dragging");rideDrag=null});
+let suppressRideClick=false;
+dragSurface.addEventListener("click",event=>{if(suppressRideClick){event.stopImmediatePropagation();event.preventDefault()}},true);
 document.addEventListener("click",event=>{
  if(!selectedTripIds.size)return;
  const target=event.target;
