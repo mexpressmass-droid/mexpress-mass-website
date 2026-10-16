@@ -98,6 +98,28 @@ async function employeeAdmin(request,env){
    await logEmployeeEvent(env,user,staffRole,"update_ride",user.id,{ride_id:body.ride_id,changes:{status:body.status,pickup_address:changes.pickup_address,dropoff_address:changes.dropoff_address,assigned_driver_id:driverId}});
    return reply({success:true});
   }
+  if(body.action==="seed_demo_rides"){
+   if(staffRole!=="admin")return reply({error:"Administrator access required"},403);
+   const tag="MEXPRESS_DEMO_OCT2026";
+   const existing=await fetch(SUPABASE+"/rest/v1/trips?select=id&notes=like.*"+tag+"*&limit=1",{headers:serviceHeaders});
+   if(!existing.ok)return reply({error:"Unable to check existing demo rides"},502);
+   if((await existing.json()).length)return reply({error:"Demo rides already exist. No duplicates were created."},409);
+   const places=["Burlington, MA","Woburn, MA","Lexington, MA","Waltham, MA","Cambridge, MA","Boston, MA","Newton, MA","Medford, MA","Arlington, MA","Brookline, MA"];
+   const times=["09:00","10:30","12:15","14:00","15:45"];
+   const dates=[];
+   for(let i=0;i<30;i++){const d=new Date(Date.UTC(2026,9,19+i));if(d.getUTCDay()!==0&&d.getUTCDay()!==6)dates.push(d.toISOString().slice(0,10))}
+   const records=Array.from({length:25},(_,i)=>{
+    const date=dates[Math.floor(i*dates.length/25)];
+    const time=times[i%times.length];
+    const pickup=places[i%places.length],dropoff=places[(i+3)%places.length];
+    return {passenger_name:"DEMO Passenger "+String(i+1).padStart(2,"0"),passenger_phone:"000-000-0000",pickup_address:"TEST ONLY — "+pickup,dropoff_address:"TEST ONLY — "+dropoff,pickup_at:date+"T"+time+":00"+(date<"2026-11-01"?"-04:00":"-05:00"),wheelchair_required:i%3===0,trip_type:"one_way",status:"pending",source:"dispatch",assigned_driver_id:null,notes:tag+" — TEST DATA, NOT A REAL BOOKING",price_cents:9288+(i%4)*1000};
+   });
+   const inserted=await fetch(SUPABASE+"/rest/v1/trips",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(records)});
+   if(!inserted.ok){console.error("Demo seed failed",inserted.status,await inserted.text());return reply({error:"Unable to create demo rides"},502)}
+   const created=await inserted.json();
+   await logEmployeeEvent(env,user,staffRole,"seed_demo_rides",user.id,{count:created.length,tag});
+   return reply({success:true,count:created.length});
+  }
   if(body.action==="create_ride"){
    const fields=["passenger_name","passenger_phone","pickup_address","dropoff_address","pickup_at"];
    if(fields.some(k=>typeof body[k]!=="string"||!body[k].trim()||body[k].length>500))return reply({error:"Passenger, phone, addresses and pickup time are required"},400);
