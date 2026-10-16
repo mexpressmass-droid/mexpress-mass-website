@@ -146,6 +146,21 @@ async function employeeAdmin(request,env){
    await logEmployeeEvent(env,user,staffRole,"bulk_update_status",user.id,{count:updated.length,status:body.status,ride_ids:body.ride_ids});
    return reply({success:true,count:updated.length,requested:body.ride_ids.length});
   }
+  if(body.action==="update_ride_contact"){
+   if(typeof body.ride_id!=="string"||!/^[0-9a-f-]{36}$/i.test(body.ride_id))return reply({error:"Invalid ride"},400);
+   const field=body.field;
+   if(!["passenger_name","passenger_phone","passenger_email"].includes(field))return reply({error:"Invalid contact field"},400);
+   if(typeof body.value!=="string"||body.value.length>250||(field==="passenger_name"&&!body.value.trim()))return reply({error:"Invalid contact value"},400);
+   const oldResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,"+field+"&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
+   if(!oldResponse.ok)return reply({error:"Unable to load contact"},502);
+   const old=(await oldResponse.json())[0];if(!old)return reply({error:"Ride not found"},404);
+   const value=body.value.trim()||null;
+   if((old[field]??null)===value)return reply({success:true,unchanged:true});
+   const patch=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({[field]:value,updated_at:new Date().toISOString()})});
+   if(!patch.ok)return reply({error:"Unable to save contact"},502);
+   await logEmployeeEvent(env,user,staffRole,"update_ride_contact",body.ride_id,{ride_id:body.ride_id,changes:{[field]:{before:old[field]??null,after:value}}});
+   return reply({success:true});
+  }
   if(body.action==="update_ride"){
    if(typeof body.ride_id!=="string"||!/^[0-9a-f-]{36}$/i.test(body.ride_id))return reply({error:"Invalid ride"},400);
    const currentResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,status,assigned_driver_id,pickup_at,dropoff_at,pickup_address,dropoff_address,price_cents,internal_notes,notes&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
