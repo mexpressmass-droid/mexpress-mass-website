@@ -339,7 +339,12 @@ const pu=new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_
  timeEdit.addEventListener("keydown",event=>{if(event.key==="Escape"){event.preventDefault();cancelTime()}});
  timeActions.append(timeCancel,timeApply);timeEdit.append(timeActions);
  if(!timeLocked){timeCell.classList.add("time-cell-clickable");timeCell.title+=" | Click to edit";timeCell.addEventListener("click",()=>{if(timeEdit.classList.contains("hidden")){document.body.append(timeEdit);timeEdit.classList.remove("hidden");if(!selectedTripIds.has(trip.id)){selectedTripIds.add(trip.id);check.checked=true;updateSelection()}puEdit.focus()}else cancelTime()})}
- timeWrap.append(timeEdit);td(row,timeWrap);const passenger=el("div");passenger.className="compact-passenger";passenger.title=[trip.passenger_name,trip.passenger_phone,trip.passenger_email].filter(Boolean).join(" | ");passenger.append(el("strong",trip.passenger_name),el("small",trip.passenger_phone));td(row,passenger);let route=el("div");
+ timeWrap.append(timeEdit);td(row,timeWrap);const passenger=el("div");passenger.className="compact-passenger";passenger.title=[trip.passenger_name,trip.passenger_phone,trip.passenger_email].filter(Boolean).join(" | ");passenger.append(el("strong",trip.passenger_name),el("small",trip.passenger_phone));td(row,passenger);
+const cell=el("div");cell.className="client-cell";
+if(trip.passenger_phone){const phone=el("a",trip.passenger_phone);phone.href="tel:"+trip.passenger_phone.replace(/[^+0-9]/g,"");phone.title="Call passenger";cell.append(phone)}
+else cell.append(el("span","—"));
+if(trip.passenger_email){const email=el("a",trip.passenger_email);email.href="mailto:"+trip.passenger_email;email.title=trip.passenger_email;cell.append(email)}
+td(row,cell);let route=el("div");
 function bostonTimeValue(value){return value?new Date(value).toLocaleTimeString("en-GB",{timeZone:"America/New_York",hour:"2-digit",minute:"2-digit",hour12:false}):""}
 function changedBostonTime(original,time){
  if(!time||!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(time))throw Error("Enter a valid time");
