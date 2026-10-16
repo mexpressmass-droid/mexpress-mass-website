@@ -312,7 +312,7 @@ const pu=new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_
  const dropEdit=el("input");dropEdit.type="time";dropEdit.value=bostonTimeValue(trip.dropoff_at);dropEdit.disabled=timeLocked;dropEdit.title=timeLocked?"Time locked for completed or cancelled rides":"Edit drop-off time";
  const timeEdit=el("div");timeEdit.className="time-editor hidden";
  const puLabel=el("label","PU");puLabel.append(puEdit);const dropLabel=el("label","DropOff");dropLabel.append(dropEdit);timeEdit.append(puLabel,dropLabel);
- if(!timeLocked){timeCell.classList.add("time-cell-clickable");timeCell.title+=" | Click to edit";timeCell.addEventListener("click",()=>{timeEdit.classList.toggle("hidden");if(!timeEdit.classList.contains("hidden"))puEdit.focus()})}
+ if(!timeLocked){timeCell.classList.add("time-cell-clickable");timeCell.title+=" | Click to edit";timeCell.addEventListener("click",()=>{if(timeEdit.classList.contains("hidden")){document.body.append(timeEdit);timeEdit.classList.remove("hidden");puEdit.focus()}else timeEdit.classList.add("hidden")})}
  timeWrap.append(timeEdit);td(row,timeWrap);const passenger=el("div");passenger.className="compact-passenger";passenger.title=[trip.passenger_name,trip.passenger_phone,trip.passenger_email].filter(Boolean).join(" | ");passenger.append(el("strong",trip.passenger_name),el("small",trip.passenger_phone));td(row,passenger);let route=el("div");
 function bostonTimeValue(value){return value?new Date(value).toLocaleTimeString("en-GB",{timeZone:"America/New_York",hour:"2-digit",minute:"2-digit",hour12:false}):""}
 function changedBostonTime(original,time){
