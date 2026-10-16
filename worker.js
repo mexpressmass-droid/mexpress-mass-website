@@ -172,6 +172,34 @@ async function employeeAdmin(request,env){
    await logEmployeeEvent(env,user,staffRole,"update_ride",user.id,{ride_id:body.ride_id,changes:{status:nextStatus,pickup_address:changes.pickup_address,dropoff_address:changes.dropoff_address,assigned_driver_id:driverId}});
    return reply({success:true});
   }
+  if(body.action==="seed_demo_50_rides"){
+   if(staffRole!=="admin")return reply({error:"Administrator access required"},403);
+   const tag="MEXPRESS_DEMO_50_OCT2026";
+   const existing=await fetch(SUPABASE+"/rest/v1/trips?select=id&notes=like.*"+tag+"*&limit=1",{headers:serviceHeaders});
+   if(!existing.ok)return reply({error:"Unable to check existing demo rides"},502);
+   if((await existing.json()).length)return reply({error:"These 50 demo rides were already created. No duplicates added."},409);
+   const names=["Olivia Parker","James Wilson","Sophia Bennett","Daniel Foster","Emma Mitchell","Noah Turner","Ava Collins","Liam Brooks","Mia Peterson","Ethan Reed","Charlotte Hayes","Lucas Morgan","Amelia Cooper","Henry Sullivan","Harper Jenkins","Benjamin Price","Isabella Ross","Alexander Gray","Evelyn Murphy","William Carter","Grace Phillips","Jack Edwards","Chloe Richardson","Oliver Bailey","Ella Hughes","Mason Ward","Lily Sanders","Logan Perry","Zoe Coleman","Samuel Rivera"];
+   const places=["Burlington, MA","Woburn, MA","Lexington, MA","Waltham, MA","Newton, MA","Cambridge, MA","Medford, MA","Arlington, MA","Brookline, MA","Boston, MA"];
+   const todayBoston=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+   const base=new Date(todayBoston+"T12:00:00Z");
+   function dateAt(day){const d=new Date(base);d.setUTCDate(d.getUTCDate()+day);return d.toISOString().slice(0,10)}
+   function localBostonIso(day,hhmm){const date=dateAt(day),utcGuess=new Date(date+"T"+hhmm+":00Z");const offsetName=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",timeZoneName:"shortOffset"}).formatToParts(utcGuess).find(p=>p.type==="timeZoneName")?.value||"GMT-4";const match=offsetName.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);const offset=match?(match[1]==="-"?-1:1)*(Number(match[2])*60+Number(match[3]||0)):-240;return new Date(utcGuess.getTime()-offset*60000).toISOString()}
+   const records=[];
+   for(let i=0;i<30;i++){
+    const day=1+(i*7)%30,origin=places[i%places.length],destination=places[(i+3)%places.length],name=names[i];
+    const departure=["08:00","09:00","10:00","11:00","12:00"][i%5];
+    const returnTime=["12:30","13:30","14:30","15:30","16:30"][i%5];
+    const pair=i<20,group=pair?"PAIR-"+String(i+1).padStart(2,"0"):"SINGLE-"+String(i-19).padStart(2,"0");
+    const baseRide={passenger_name:"TEST — "+name,passenger_phone:"000-000-0000",wheelchair_required:i%3===0,trip_type:"one_way",status:"pending",source:"dispatch",assigned_driver_id:null,price_cents:9288+(i%6)*1250};
+    records.push({...baseRide,pickup_address:"TEST ONLY — "+origin,dropoff_address:"TEST ONLY — "+destination,pickup_at:localBostonIso(day,departure),notes:tag+" | "+group+" | OUTBOUND | TEST DATA, NOT A REAL BOOKING"});
+    if(pair)records.push({...baseRide,pickup_address:"TEST ONLY — "+destination,dropoff_address:"TEST ONLY — "+origin,pickup_at:localBostonIso(day,returnTime),notes:tag+" | "+group+" | RETURN | TEST DATA, NOT A REAL BOOKING"});
+   }
+   const inserted=await fetch(SUPABASE+"/rest/v1/trips",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(records)});
+   if(!inserted.ok){console.error("50 demo seed failed",inserted.status,await inserted.text());return reply({error:"Unable to create 50 demo rides"},502)}
+   const created=await inserted.json();
+   await logEmployeeEvent(env,user,staffRole,"seed_demo_50_rides",user.id,{count:created.length,tag});
+   return reply({success:true,count:created.length,pairs:20,singles:10});
+  }
   if(body.action==="seed_demo_rides"){
    if(staffRole!=="admin")return reply({error:"Administrator access required"},403);
    const tag="MEXPRESS_DEMO_OCT2026";
