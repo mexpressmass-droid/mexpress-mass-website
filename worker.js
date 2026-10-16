@@ -84,7 +84,15 @@ async function employeeAdmin(request,env){
    if(staffRole!=="admin")return reply({error:"Only administrators may permanently delete rides"},403);
    if(body.confirmation!=="DELETE PERMANENTLY")return reply({error:"Deletion confirmation required"},400);
    if(!Array.isArray(body.ride_ids)||body.ride_ids.length<1||body.ride_ids.length>100||new Set(body.ride_ids).size!==body.ride_ids.length||body.ride_ids.some(id=>typeof id!=="string"||!/^[0-9a-f-]{36}$/i.test(id)))return reply({error:"Invalid ride selection"},400);
-   return reply({error:"Permanent deletion is locked until related trip records and database constraints have been audited. No rides were deleted."},409);
+   const ids=body.ride_ids.join(",");
+   const lookup=await fetch(SUPABASE+"/rest/v1/trips?select=id&id=in.("+ids+")",{headers:serviceHeaders});
+   if(!lookup.ok)return reply({error:"Could not verify selected rides"},502);
+   const existing=await lookup.json();
+   if(existing.length!==body.ride_ids.length)return reply({error:"One or more selected rides no longer exist. Refresh and try again."},409);
+   const deletion=await fetch(SUPABASE+"/rest/v1/trips?id=in.("+ids+")",{method:"DELETE",headers:{...serviceHeaders,"Prefer":"return=representation"}});
+   if(!deletion.ok)return reply({error:"Database refused deletion; no deletion was confirmed. Check related table constraints."},502);
+   const deleted=await deletion.json();
+   return reply({success:true,count:deleted.length,requested:body.ride_ids.length});
   }
   if(body.action==="archive_rides"){
    if(!Array.isArray(body.ride_ids)||body.ride_ids.length<1||body.ride_ids.length>200||new Set(body.ride_ids).size!==body.ride_ids.length||body.ride_ids.some(id=>typeof id!=="string"||!/^[0-9a-f-]{36}$/i.test(id)))return reply({error:"Invalid ride selection"},400);
