@@ -75,6 +75,17 @@ async function employeeAdmin(request,env){
    await logEmployeeEvent(env,user,staffRole,body.event,user.id,{source:"web",...((body.context&&typeof body.context==="object")?{context:String(body.context.value||"").slice(0,120)}:{})});
    return reply({success:true});
   }
+  if(body.action==="archive_list"){
+   const res=await fetch(SUPABASE+"/rest/v1/trips?select=id,passenger_name,pickup_at,pickup_address,dropoff_address,status,assigned_driver_id,price_cents,archived_at,archive_source&archived_at=not.is.null&order=pickup_at.desc&limit=1000",{headers:serviceHeaders});
+   if(!res.ok)return reply({error:"Unable to load archive"},502);
+   return reply({rides:await res.json()});
+  }
+  if(body.action==="delete_rides"){
+   if(staffRole!=="admin")return reply({error:"Only administrators may permanently delete rides"},403);
+   if(body.confirmation!=="DELETE PERMANENTLY")return reply({error:"Deletion confirmation required"},400);
+   if(!Array.isArray(body.ride_ids)||body.ride_ids.length<1||body.ride_ids.length>100||new Set(body.ride_ids).size!==body.ride_ids.length||body.ride_ids.some(id=>typeof id!=="string"||!/^[0-9a-f-]{36}$/i.test(id)))return reply({error:"Invalid ride selection"},400);
+   return reply({error:"Permanent deletion is locked until related trip records and database constraints have been audited. No rides were deleted."},409);
+  }
   if(body.action==="archive_rides"){
    if(!Array.isArray(body.ride_ids)||body.ride_ids.length<1||body.ride_ids.length>200||new Set(body.ride_ids).size!==body.ride_ids.length||body.ride_ids.some(id=>typeof id!=="string"||!/^[0-9a-f-]{36}$/i.test(id)))return reply({error:"Invalid ride selection"},400);
    const ids=body.ride_ids.join(",");
