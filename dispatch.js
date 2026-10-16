@@ -214,7 +214,7 @@ async function loadMyRides(){
   const note=$("my-rides-notice"),list=$("my-rides-list");
   note.textContent="Loading...";
   try{
-    const trips=staffRole==="driver"?await api("/rest/v1/trips?select=id,passenger_name,passenger_phone,pickup_at,pickup_address,dropoff_address,status,notes,assigned_driver_id&assigned_driver_id=eq."+encodeURIComponent(userId)+"&order=pickup_at.asc"):await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"});
+    const trips=staffRole==="driver"?await api("/rest/v1/trips?select=id,passenger_name,passenger_phone,pickup_at,pickup_address,dropoff_address,dropoff_at,status,notes,assigned_driver_id&assigned_driver_id=eq."+encodeURIComponent(userId)+"&order=pickup_at.asc"):await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"});
     const mine=trips.filter(t=>t.assigned_driver_id===userId&&(["completed","cancelled"].includes(t.status)===(myRidesTab==="history"))).sort((a,b)=>myRidesTab==="history"?new Date(b.pickup_at)-new Date(a.pickup_at):new Date(a.pickup_at)-new Date(b.pickup_at));
     updateRideNotifications(trips);
     list.replaceChildren();
