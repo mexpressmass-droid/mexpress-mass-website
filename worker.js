@@ -191,8 +191,8 @@ async function employeeAdmin(request,env){
     const returnTime=["12:30","13:30","14:30","15:30","16:30"][i%5];
     const pair=i<20,group=pair?"PAIR-"+String(i+1).padStart(2,"0"):"SINGLE-"+String(i-19).padStart(2,"0");
     const baseRide={passenger_name:"TEST — "+name,passenger_phone:"000-000-0000",wheelchair_required:i%3===0,trip_type:"one_way",status:"pending",source:"dispatch",assigned_driver_id:null,price_cents:9288+(i%6)*1250};
-    records.push({...baseRide,pickup_address:"TEST ONLY — "+origin,dropoff_address:"TEST ONLY — "+destination,pickup_at:localBostonIso(day,departure),notes:tag+" | "+group+" | OUTBOUND | TEST DATA, NOT A REAL BOOKING"});
-    if(pair)records.push({...baseRide,pickup_address:"TEST ONLY — "+destination,dropoff_address:"TEST ONLY — "+origin,pickup_at:localBostonIso(day,returnTime),notes:tag+" | "+group+" | RETURN | TEST DATA, NOT A REAL BOOKING"});
+    records.push({...baseRide,pickup_address:"TEST ONLY — "+origin,dropoff_address:"TEST ONLY — "+destination,pickup_at:localBostonIso(day,departure),dropoff_at:localBostonIso(day,["08:45","09:50","11:00","12:05","13:15"][i%5]),notes:tag+" | "+group+" | OUTBOUND | TEST DATA, NOT A REAL BOOKING"});
+    if(pair)records.push({...baseRide,pickup_address:"TEST ONLY — "+destination,dropoff_address:"TEST ONLY — "+origin,pickup_at:localBostonIso(day,returnTime),dropoff_at:localBostonIso(day,"00:00"),notes:tag+" | "+group+" | RETURN | TEST DATA, NOT A REAL BOOKING"});
    }
    const inserted=await fetch(SUPABASE+"/rest/v1/trips",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(records)});
    if(!inserted.ok){console.error("50 demo seed failed",inserted.status,await inserted.text());return reply({error:"Unable to create 50 demo rides"},502)}
