@@ -118,9 +118,10 @@ async function employeeAdmin(request,env){
    if(!existingResponse.ok)return reply({error:"Unable to check selected rides"},502);
    const existing=await existingResponse.json();
    if(existing.length!==body.ride_ids.length||existing.some(t=>t.archived_at!==null))return reply({error:"One or more rides are missing or archived. Refresh and retry."},409);
+   if(existing.some(t=>t.status==="pending"))return reply({error:"Pending rides must be confirmed before assigning a driver. No rides were changed."},409);
    const now=new Date().toISOString();
    let updatedCount=0;
-   for(const group of [existing.filter(t=>["pending","confirmed","assigned"].includes(t.status)),existing.filter(t=>!["pending","confirmed","assigned"].includes(t.status))]){
+   for(const group of [existing.filter(t=>["confirmed","assigned"].includes(t.status)),existing.filter(t=>!["confirmed","assigned"].includes(t.status))]){
     if(!group.length)continue;
     const patch={assigned_driver_id:driverId,updated_at:now};
     if(["pending","confirmed","assigned"].includes(group[0].status))patch.status="assigned";
@@ -157,11 +158,12 @@ async function employeeAdmin(request,env){
    const driverId=body.assigned_driver_id||null;
    if(driverId!==null&&(typeof driverId!=="string"||!/^[0-9a-f-]{36}$/i.test(driverId)))return reply({error:"Invalid driver"},400);
    
+   if(current.status==="pending"&&driverId!==null)return reply({error:"Confirm this ride first, then assign a driver."},409);
    if(driverId!==null&&driverId!==current.assigned_driver_id){
     const driverResponse=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&id=eq."+encodeURIComponent(driverId)+"&role=eq.driver&is_active=eq.true&limit=1",{headers:serviceHeaders});
     if(!driverResponse.ok||!(await driverResponse.json()).length)return reply({error:"Only active drivers can be assigned"},400);
    }
-   const nextStatus=driverId!==null&&["pending","confirmed","assigned"].includes(body.status)?"assigned":body.status;
+   const nextStatus=driverId!==null&&["confirmed","assigned"].includes(body.status)?"assigned":body.status;
    const changes={status:nextStatus,pickup_address:body.pickup_address.trim(),dropoff_address:body.dropoff_address.trim(),price_cents:body.price_cents,assigned_driver_id:driverId,internal_notes:body.internal_notes,updated_at:new Date().toISOString()};
    const saved=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(changes)});
    if(!saved.ok)return reply({error:"Unable to save ride changes"},502);
