@@ -380,9 +380,9 @@ const pu=new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_
  for(const input of [puEdit,dropEdit])input.addEventListener("input",previewTime);
  timeEdit.addEventListener("keydown",event=>{if(event.key==="Escape"){event.preventDefault();cancelTime()}});
  timeActions.append(timeCancel,timeApply);timeEdit.append(timeActions);
- if(!timeLocked){timeCell.classList.add("time-cell-clickable");timeCell.title+=" | Click to edit";timeCell.addEventListener("click",()=>{if(timeEdit.classList.contains("hidden")){document.body.append(timeEdit);timeEdit.classList.remove("hidden");if(!selectedTripIds.has(trip.id)){selectedTripIds.add(trip.id);check.checked=true;updateSelection()}puEdit.focus()}else cancelTime()})}
+ if(!timeLocked){timeCell.classList.add("time-cell-clickable");timeCell.title+=" | Double-click to edit";timeCell.addEventListener("dblclick",()=>{if(timeEdit.classList.contains("hidden")){document.body.append(timeEdit);timeEdit.classList.remove("hidden");if(!selectedTripIds.has(trip.id)){selectedTripIds.add(trip.id);check.checked=true;updateSelection()}puEdit.focus()}else cancelTime()})}
  timeWrap.append(timeEdit);td(row,timeWrap);const passenger=el("div");passenger.className="compact-passenger";passenger.title=[trip.passenger_name,trip.passenger_phone,trip.passenger_email].filter(Boolean).join(" | ");function contactAction(field,label,value){
- const button=el("button",value||"—");button.type="button";button.className="contact-action-trigger";button.title="Copy or edit "+label;
+ const button=el("button",value||"—");button.type="button";button.className="contact-action-trigger";button.title="Click for Copy; double-click for Edit "+label;
  button.addEventListener("click",event=>{
   event.stopPropagation();
   document.querySelectorAll(".contact-action-popover").forEach(node=>node.remove());
@@ -450,21 +450,32 @@ function openFullCellEditor(field,label){
 }
 function expandOnClick(field,label){
  field.classList.add("cell-expandable");
- field.title="Click to view and edit full "+label;
- field.addEventListener("click",()=>openFullCellEditor(field,label));
+ field.title="Double-click to edit "+label;
+ field.addEventListener("dblclick",()=>openFullCellEditor(field,label));
 }
 function addressEditor(value,placeholder){
  const wrap=el("div");wrap.className="compact-route-item";wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="3px";
- const shown=el("span",value);shown.className="compact-ellipsis";shown.title=value;shown.addEventListener("click",()=>openFullCellEditor(field,placeholder));shown.style.flex="1";
+ const shown=el("span",value);shown.className="compact-ellipsis";shown.title=value;shown.addEventListener("dblclick",()=>openFullCellEditor(field,placeholder));shown.style.flex="1";
  const field=el("input");field.type="text";field.value=value;field.maxLength=500;field.placeholder=placeholder;field.style.flex="1";field.style.minWidth="100px";field.classList.add("hidden");
  const edit=el("button","✎");edit.type="button";edit.title="Edit "+placeholder;edit.setAttribute("aria-label","Edit "+placeholder);edit.style.padding="2px 7px";edit.style.fontSize="15px";edit.style.lineHeight="1.3";edit.style.flexShrink="0";
- edit.addEventListener("click",()=>{const editing=field.classList.contains("hidden");if(editing){shown.classList.add("hidden");field.classList.remove("hidden");edit.textContent="✓";edit.title="Finish editing";field.focus();field.select()}else{if(field.value!==shown.textContent&&!confirm("Confirm "+placeholder+" change?")){field.value=shown.textContent;field.focus();return}shown.textContent=field.value;shown.title=field.value;shown.classList.remove("hidden");field.classList.add("hidden");edit.textContent="✎";edit.title="Edit "+placeholder}});
+ edit.addEventListener("dblclick",()=>{const editing=field.classList.contains("hidden");if(editing){shown.classList.add("hidden");field.classList.remove("hidden");edit.textContent="✓";edit.title="Finish editing";field.focus();field.select()}else{if(field.value!==shown.textContent&&!confirm("Confirm "+placeholder+" change?")){field.value=shown.textContent;field.focus();return}shown.textContent=field.value;shown.title=field.value;shown.classList.remove("hidden");field.classList.add("hidden");edit.textContent="✎";edit.title="Edit "+placeholder}});
  wrap.append(shown,field,edit);route.append(wrap);return field;
 }
 const pickupInput=addressEditor(trip.pickup_address,"Pickup address");td(row,route);const dropRoute=el("div");route=dropRoute;const dropoffInput=addressEditor(trip.dropoff_address,"Drop-off address");td(row,dropRoute);
-const statuses=["pending","confirmed","assigned","on_the_way","arrived","boarded","completed","cancelled"];const status=select([...new Set([trip.status,...statuses])].map(v=>[v,v.replaceAll("_"," ")]).concat([["archive","Move to Archive"],...(staffRole==="admin"?[["delete","Delete Permanently"]]:[])]),trip.status);for(const option of status.options){if(option.value==="archive"){option.style.color="#d97706";option.style.fontWeight="700"}if(option.value==="delete"){option.style.color="#c62828";option.style.fontWeight="700"}}status.dataset.rideStatus="true";status.addEventListener("change",()=>{if(selectedTripIds.has(trip.id)&&selectedTripIds.size>=1){$("bulk-status").value=status.value;previewSelectedChanges("status",status.value)}});td(row,status);
-const price=el("input");price.type="number";price.min="0";price.step="0.01";price.value=trip.price_cents==null?"":(trip.price_cents/100).toFixed(2);price.placeholder="Not set";td(row,price);
-const archivedAssigned=allDriverProfiles.find(d=>d.id===trip.assigned_driver_id&&d.is_active===false);const driverOptions=[["","Unassigned"],...drivers.filter(d=>d.role==="driver").map(d=>[d.id,d.display_name+" ("+d.username+")"])];if(archivedAssigned&&staffRole==="admin")driverOptions.push([archivedAssigned.id,archivedAssigned.display_name+" (archived — historical assignment)"]);const driver=select(driverOptions,trip.assigned_driver_id||"");if(trip.status==="pending"){driver.disabled=true;driver.title="Confirm and save this ride before assigning a driver."}driver.dataset.rideDriver="true";driver.addEventListener("change",()=>{if(selectedTripIds.has(trip.id)&&selectedTripIds.size>=1&&driver.value){$("bulk-driver").value=driver.value;previewSelectedChanges("driver",driver.value)}});if(archivedAssigned&&staffRole==="admin"){const opt=Array.from(driver.options).find(o=>o.value===archivedAssigned.id);if(opt)opt.disabled=true}td(row,driver);
+const statuses=["pending","confirmed","assigned","on_the_way","arrived","boarded","completed","cancelled"];function doubleClickField(field){
+ field.classList.add("dblclick-edit-field");
+ field.title="Double-click to edit";
+ let unlocked=false;
+ const block=event=>{if(!unlocked){event.preventDefault();event.stopPropagation()}};
+ field.addEventListener("pointerdown",block,true);
+ field.addEventListener("click",block,true);
+ field.addEventListener("dblclick",event=>{event.preventDefault();event.stopPropagation();unlocked=true;field.classList.add("editing-active");field.focus();if(field.tagName==="SELECT")field.showPicker?.();else field.select?.()});
+ field.addEventListener("blur",()=>{unlocked=false;field.classList.remove("editing-active")});
+ field.addEventListener("keydown",event=>{if(event.key==="Escape"){field.blur()}});
+}
+const status=select([...new Set([trip.status,...statuses])].map(v=>[v,v.replaceAll("_"," ")]).concat([["archive","Move to Archive"],...(staffRole==="admin"?[["delete","Delete Permanently"]]:[])]),trip.status);for(const option of status.options){if(option.value==="archive"){option.style.color="#d97706";option.style.fontWeight="700"}if(option.value==="delete"){option.style.color="#c62828";option.style.fontWeight="700"}}status.dataset.rideStatus="true";doubleClickField(status);status.addEventListener("change",()=>{if(selectedTripIds.has(trip.id)&&selectedTripIds.size>=1){$("bulk-status").value=status.value;previewSelectedChanges("status",status.value)}});td(row,status);
+const price=el("input");price.type="number";price.min="0";price.step="0.01";price.value=trip.price_cents==null?"":(trip.price_cents/100).toFixed(2);price.placeholder="Not set";doubleClickField(price);td(row,price);
+const archivedAssigned=allDriverProfiles.find(d=>d.id===trip.assigned_driver_id&&d.is_active===false);const driverOptions=[["","Unassigned"],...drivers.filter(d=>d.role==="driver").map(d=>[d.id,d.display_name+" ("+d.username+")"])];if(archivedAssigned&&staffRole==="admin")driverOptions.push([archivedAssigned.id,archivedAssigned.display_name+" (archived — historical assignment)"]);const driver=select(driverOptions,trip.assigned_driver_id||"");if(trip.status==="pending"){driver.disabled=true;driver.title="Confirm and save this ride before assigning a driver."}driver.dataset.rideDriver="true";doubleClickField(driver);driver.addEventListener("change",()=>{if(selectedTripIds.has(trip.id)&&selectedTripIds.size>=1&&driver.value){$("bulk-driver").value=driver.value;previewSelectedChanges("driver",driver.value)}});if(archivedAssigned&&staffRole==="admin"){const opt=Array.from(driver.options).find(o=>o.value===archivedAssigned.id);if(opt)opt.disabled=true}td(row,driver);
 const driverComment=el("textarea");driverComment.rows=2;driverComment.maxLength=4000;driverComment.className="driver-comment-edit";driverComment.title=trip.notes||"Driver comments — visible to assigned driver";driverComment.placeholder="Notes for driver";driverComment.value=[trip.wheelchair_required&&!/\bwheelchair\b/i.test(trip.notes||"")?"Wheelchair required":null,trip.notes||null].filter(Boolean).join(" | ");expandOnClick(driverComment,"Driver Comments");td(row,driverComment);const internal=el("textarea");internal.rows=2;internal.maxLength=4000;internal.title=trip.internal_notes||"Internal comments";internal.placeholder="Staff only — not visible to driver";internal.value=trip.internal_notes||"";internal.addEventListener("input",()=>{row.classList.toggle("has-internal-comments",!!internal.value.trim());row.classList.toggle("cancelled-no-internal-comments",!internal.value.trim()&&trip.status==="cancelled")});expandOnClick(internal,"Internal Comments");td(row,internal);
 const save=el("button","Save");save.addEventListener("click",async()=>{
  const selectedAction=status.value;
