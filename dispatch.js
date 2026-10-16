@@ -62,10 +62,9 @@ function addDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.g
 function visibleTrip(t){const range=$("dispatch-range").value,day=$("dispatch-date").value,date=bostonDate(t.pickup_at);return range==="all"||!day||(range==="day"?date===day:date>=day&&date<addDays(day,7))}
 function tripColor(status){return status==="pending"?"ride-pending":status==="assigned"?"ride-assigned":status==="completed"?"ride-completed":status==="cancelled"?"ride-cancelled":""}
 $("dispatch-date").value=bostonDate(new Date());
-function updateSelection(){const count=selectedTripIds.size;$("bulk-count").textContent=count+" selected";$("bulk-apply").disabled=count===0;$("bulk-clear").disabled=count===0;$("bulk-archive").disabled=count===0;$("bulk-delete").disabled=count===0;const all=visibleTripIds.length>0&&visibleTripIds.every(id=>selectedTripIds.has(id));$("bulk-all").checked=all;$("bulk-all").indeterminate=!all&&visibleTripIds.some(id=>selectedTripIds.has(id))}
+function updateSelection(){const count=selectedTripIds.size;$("bulk-count").textContent=count+" selected";$("bulk-apply").disabled=count===0;$("bulk-clear").disabled=count===0;const all=visibleTripIds.length>0&&visibleTripIds.every(id=>selectedTripIds.has(id));$("bulk-all").checked=all;$("bulk-all").indeterminate=!all&&visibleTripIds.some(id=>selectedTripIds.has(id))}
 $("bulk-all").addEventListener("change",e=>{for(const id of visibleTripIds){if(e.target.checked)selectedTripIds.add(id);else selectedTripIds.delete(id)}for(const input of document.querySelectorAll(".trip-select"))input.checked=selectedTripIds.has(input.value);updateSelection()});
 $("bulk-clear").addEventListener("click",()=>{selectedTripIds.clear();for(const input of document.querySelectorAll(".trip-select"))input.checked=false;updateSelection()});
-$("bulk-archive").addEventListener("click",async()=>{const ids=[...selectedTripIds];if(!ids.length)return;if(!confirm("Move "+ids.length+" selected Completed/Cancelled ride(s) to Archive?"))return;const b=$("bulk-archive");b.disabled=true;try{const res=await employeeAdminRequest({action:"archive_rides",ride_ids:ids});selectedTripIds.clear();await load();msg(res.count+" ride(s) moved to Archive.")}catch(e){msg(e.message,true)}finally{b.disabled=false;updateSelection()}});
 async function permanentlyDeleteRides(ids,after){
  if(staffRole!=="admin"||!ids.length)return;
  if(!confirm("PERMANENTLY DELETE "+ids.length+" ride(s) and their status history? This cannot be undone."))return;
@@ -77,7 +76,6 @@ async function permanentlyDeleteRides(ids,after){
   await after();
  }catch(e){alert("Delete failed: "+e.message)}
 }
-$("bulk-delete").addEventListener("click",async()=>{const ids=[...selectedTripIds];await permanentlyDeleteRides(ids,async()=>{selectedTripIds.clear();await load();msg(ids.length+" ride(s) permanently deleted.")})});
 let archiveRides=[],selectedArchivedIds=new Set(),visibleArchivedIds=[];
 function updateArchiveSelection(){
  const count=selectedArchivedIds.size;
@@ -266,7 +264,18 @@ const save=el("button","Save");save.addEventListener("click",async()=>{
  }
  if(!confirm("Confirm changes to this ride?"))return;
  save.disabled=true;try{const cents=price.value.trim()===""?null:Math.round(Number(price.value)*100);if(cents!==null&&(!Number.isSafeInteger(cents)||cents<0))throw Error("Invalid price");await employeeAdminRequest({action:"update_ride",ride_id:trip.id,status:status.value,price_cents:cents,assigned_driver_id:driver.value||null,pickup_address:pickupInput.value,dropoff_address:dropoffInput.value,internal_notes:internal.value.trim()||null});await load();msg("Ride updated.")}catch(err){msg(err.message,true)}finally{save.disabled=false}
-});td(row,save);body.append(row)}updateSelection();msg(trips.length+" ride(s) in selected view.");}catch(err){msg(err.message,true)}finally{refreshing=false}}
+});td(row,save);
+const archiveButton=el("button","Move to Archive");archiveButton.type="button";archiveButton.disabled=!["completed","cancelled"].includes(trip.status);archiveButton.title=archiveButton.disabled?"Only Completed or Cancelled rides can be archived":"Move this ride to Archive";
+archiveButton.addEventListener("click",async()=>{
+ if(!confirm("Move this ride to Archive?"))return;
+ archiveButton.disabled=true;
+ try{const result=await employeeAdminRequest({action:"archive_rides",ride_ids:[trip.id]});if(result.count!==1)throw Error("Archive was not confirmed");selectedTripIds.delete(trip.id);await load();msg("Ride moved to Archive.")}catch(err){msg(err.message,true);archiveButton.disabled=false}
+});
+td(row,archiveButton);
+const deleteButton=el("button","Delete Permanently");deleteButton.type="button";deleteButton.style.color="#c62828";deleteButton.style.fontWeight="700";deleteButton.style.border="1px solid #c62828";deleteButton.classList.toggle("hidden",staffRole!=="admin");
+deleteButton.addEventListener("click",()=>permanentlyDeleteRides([trip.id],async()=>{selectedTripIds.delete(trip.id);await load();msg("Ride permanently deleted.")}));
+td(row,deleteButton);
+body.append(row)}updateSelection();msg(trips.length+" ride(s) in selected view.");}catch(err){msg(err.message,true)}finally{refreshing=false}}
 
 let currentChatId=null,chatPoll=null,chatRenderedId=null,chatLastMessageId=null,chatLoading=false,chatForceBottom=false,chatLatestTimestamp=null,chatOtherReadAt=null;
 const CHAT_BOTTOM_THRESHOLD=75;
