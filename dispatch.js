@@ -265,14 +265,14 @@ const save=el("button","Save");save.addEventListener("click",async()=>{
  if(!confirm("Confirm changes to this ride?"))return;
  save.disabled=true;try{const cents=price.value.trim()===""?null:Math.round(Number(price.value)*100);if(cents!==null&&(!Number.isSafeInteger(cents)||cents<0))throw Error("Invalid price");await employeeAdminRequest({action:"update_ride",ride_id:trip.id,status:status.value,price_cents:cents,assigned_driver_id:driver.value||null,pickup_address:pickupInput.value,dropoff_address:dropoffInput.value,internal_notes:internal.value.trim()||null});await load();msg("Ride updated.")}catch(err){msg(err.message,true)}finally{save.disabled=false}
 });td(row,save);
-const archiveButton=el("button","Move to Archive");archiveButton.type="button";archiveButton.disabled=!["completed","cancelled"].includes(trip.status);archiveButton.title=archiveButton.disabled?"Only Completed or Cancelled rides can be archived":"Move this ride to Archive";
+const archiveButton=el("button","Move to Archive");archiveButton.type="button";archiveButton.style.color="#d97706";archiveButton.style.fontWeight="700";archiveButton.disabled=!["completed","cancelled"].includes(trip.status);archiveButton.title=archiveButton.disabled?"Only Completed or Cancelled rides can be archived":"Move this ride to Archive";
 archiveButton.addEventListener("click",async()=>{
  if(!confirm("Move this ride to Archive?"))return;
  archiveButton.disabled=true;
  try{const result=await employeeAdminRequest({action:"archive_rides",ride_ids:[trip.id]});if(result.count!==1)throw Error("Archive was not confirmed");selectedTripIds.delete(trip.id);await load();msg("Ride moved to Archive.")}catch(err){msg(err.message,true);archiveButton.disabled=false}
 });
 td(row,archiveButton);
-const deleteButton=el("button","Delete Permanently");deleteButton.type="button";deleteButton.style.color="#c62828";deleteButton.style.fontWeight="700";deleteButton.style.border="1px solid #c62828";deleteButton.classList.toggle("hidden",staffRole!=="admin");
+const deleteButton=el("button","Delete Permanently");deleteButton.type="button";deleteButton.style.color="#c62828";deleteButton.style.fontWeight="700";deleteButton.style.border="";deleteButton.classList.toggle("hidden",staffRole!=="admin");
 deleteButton.addEventListener("click",()=>permanentlyDeleteRides([trip.id],async()=>{selectedTripIds.delete(trip.id);await load();msg("Ride permanently deleted.")}));
 td(row,deleteButton);
 body.append(row)}updateSelection();msg(trips.length+" ride(s) in selected view.");}catch(err){msg(err.message,true)}finally{refreshing=false}}
