@@ -325,9 +325,20 @@ const pu=new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_
  const timeLocked=["completed","cancelled"].includes(trip.status);
  const puEdit=el("input");puEdit.type="time";puEdit.value=bostonTimeValue(trip.pickup_at);puEdit.disabled=timeLocked;puEdit.title=timeLocked?"Time locked for completed or cancelled rides":"Edit pickup time";
  const dropEdit=el("input");dropEdit.type="time";dropEdit.value=bostonTimeValue(trip.dropoff_at);dropEdit.disabled=timeLocked;dropEdit.title=timeLocked?"Time locked for completed or cancelled rides":"Edit drop-off time";
- const timeEdit=el("div");timeEdit.className="time-editor hidden";
+ const timeEdit=el("div");timeEdit.className="time-editor hidden";timeEdit.setAttribute("role","dialog");timeEdit.setAttribute("aria-label","Edit ride times");
  const puLabel=el("label","PU");puLabel.append(puEdit);const dropLabel=el("label","DropOff");dropLabel.append(dropEdit);timeEdit.append(puLabel,dropLabel);
- if(!timeLocked){timeCell.classList.add("time-cell-clickable");timeCell.title+=" | Click to edit";timeCell.addEventListener("click",()=>{if(timeEdit.classList.contains("hidden")){document.body.append(timeEdit);timeEdit.classList.remove("hidden");puEdit.focus()}else timeEdit.classList.add("hidden")})}
+ const timeActions=el("div");timeActions.className="time-editor-actions";
+ const timeCancel=el("button","Cancel");timeCancel.type="button";
+ const timeApply=el("button","Save");timeApply.type="button";
+ const closeTime=()=>{timeEdit.classList.add("hidden");timeEdit.remove()};
+ const cancelTime=()=>{puEdit.value=bostonTimeValue(trip.pickup_at);dropEdit.value=bostonTimeValue(trip.dropoff_at);closeTime()};
+ const previewTime=()=>{const pickup=puEdit.value?puEdit.value:pu;const drop=dropEdit.value?dropEdit.value:"—";timeCell.textContent="PU: "+pickup+" · DropOff: "+drop;timeCell.classList.add("time-draft")};
+ const applyTime=()=>{if(!puEdit.value){msg("Pickup time is required.",true);return}previewTime();closeTime()};
+ timeCancel.addEventListener("click",cancelTime);timeApply.addEventListener("click",applyTime);
+ for(const input of [puEdit,dropEdit])input.addEventListener("input",previewTime);
+ timeEdit.addEventListener("keydown",event=>{if(event.key==="Escape"){event.preventDefault();cancelTime()}});
+ timeActions.append(timeCancel,timeApply);timeEdit.append(timeActions);
+ if(!timeLocked){timeCell.classList.add("time-cell-clickable");timeCell.title+=" | Click to edit";timeCell.addEventListener("click",()=>{if(timeEdit.classList.contains("hidden")){document.body.append(timeEdit);timeEdit.classList.remove("hidden");if(!selectedTripIds.has(trip.id)){selectedTripIds.add(trip.id);check.checked=true;updateSelection()}puEdit.focus()}else cancelTime()})}
  timeWrap.append(timeEdit);td(row,timeWrap);const passenger=el("div");passenger.className="compact-passenger";passenger.title=[trip.passenger_name,trip.passenger_phone,trip.passenger_email].filter(Boolean).join(" | ");passenger.append(el("strong",trip.passenger_name),el("small",trip.passenger_phone));td(row,passenger);let route=el("div");
 function bostonTimeValue(value){return value?new Date(value).toLocaleTimeString("en-GB",{timeZone:"America/New_York",hour:"2-digit",minute:"2-digit",hour12:false}):""}
 function changedBostonTime(original,time){
