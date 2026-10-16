@@ -75,6 +75,19 @@ async function employeeAdmin(request,env){
    await logEmployeeEvent(env,user,staffRole,body.event,user.id,{source:"web",...((body.context&&typeof body.context==="object")?{context:String(body.context.value||"").slice(0,120)}:{})});
    return reply({success:true});
   }
+  if(body.action==="archive_rides"){
+   if(!Array.isArray(body.ride_ids)||body.ride_ids.length<1||body.ride_ids.length>200||new Set(body.ride_ids).size!==body.ride_ids.length||body.ride_ids.some(id=>typeof id!=="string"||!/^[0-9a-f-]{36}$/i.test(id)))return reply({error:"Invalid ride selection"},400);
+   const ids=body.ride_ids.join(",");
+   const lookup=await fetch(SUPABASE+"/rest/v1/trips?select=id,status,archived_at&id=in.("+ids+")",{headers:serviceHeaders});
+   if(!lookup.ok)return reply({error:"Unable to validate selected rides. Apply the archive database migration first."},502);
+   const rows=await lookup.json();
+   if(rows.length!==body.ride_ids.length||rows.some(t=>!["completed","cancelled"].includes(t.status)||t.archived_at!==null))return reply({error:"Only existing, non-archived Completed or Cancelled rides can be archived"},400);
+   const result=await fetch(SUPABASE+"/rest/v1/trips?id=in.("+ids+")&status=in.(completed,cancelled)&archived_at=is.null",{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({archived_at:new Date().toISOString(),archive_source:"manual"})});
+   if(!result.ok)return reply({error:"Unable to archive rides"},502);
+   const archived=await result.json();
+   await logEmployeeEvent(env,user,staffRole,"archive_rides",user.id,{count:archived.length,ride_ids:body.ride_ids});
+   return reply({success:true,count:archived.length,requested:body.ride_ids.length});
+  }
   if(body.action==="bulk_update_status"){
    const allowed=["pending","confirmed","assigned","on_the_way","arrived","boarded","completed","cancelled"];
    if(!allowed.includes(body.status))return reply({error:"Invalid status"},400);
