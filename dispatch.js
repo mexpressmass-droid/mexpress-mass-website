@@ -306,7 +306,27 @@ row.addEventListener("focusin",autoSelectForEdit);
 row.addEventListener("pointerdown",autoSelectForEdit);
 row.addEventListener("input",autoSelectForEdit);
 row.addEventListener("change",autoSelectForEdit);
-const pu=new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"});const doTime=trip.dropoff_at?new Date(trip.dropoff_at).toLocaleString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"}):"—";const timeCell=el("span","PU: "+pu+"  ·  DropOff: "+doTime);timeCell.title="Pickup: "+new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"full",timeStyle:"short"})+" | Drop-off: "+(trip.dropoff_at?new Date(trip.dropoff_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"full",timeStyle:"short"}):"Not set");td(row,timeCell);const passenger=el("div");passenger.className="compact-passenger";passenger.title=[trip.passenger_name,trip.passenger_phone,trip.passenger_email].filter(Boolean).join(" | ");passenger.append(el("strong",trip.passenger_name),el("small",trip.passenger_phone));td(row,passenger);let route=el("div");
+const pu=new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"});const doTime=trip.dropoff_at?new Date(trip.dropoff_at).toLocaleString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"}):"—";const timeCell=el("span","PU: "+pu+"  ·  DropOff: "+doTime);timeCell.title="Pickup: "+new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"full",timeStyle:"short"})+" | Drop-off: "+(trip.dropoff_at?new Date(trip.dropoff_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"full",timeStyle:"short"}):"Not set");const timeWrap=el("div");timeWrap.className="time-cell-wrap";timeWrap.append(timeCell);
+ const timeLocked=["completed","cancelled"].includes(trip.status);
+ const puEdit=el("input");puEdit.type="time";puEdit.value=bostonTimeValue(trip.pickup_at);puEdit.disabled=timeLocked;puEdit.title=timeLocked?"Time locked for completed or cancelled rides":"Edit pickup time";
+ const dropEdit=el("input");dropEdit.type="time";dropEdit.value=bostonTimeValue(trip.dropoff_at);dropEdit.disabled=timeLocked;dropEdit.title=timeLocked?"Time locked for completed or cancelled rides":"Edit drop-off time";
+ const timeEdit=el("div");timeEdit.className="time-editor hidden";
+ const puLabel=el("label","PU");puLabel.append(puEdit);const dropLabel=el("label","DropOff");dropLabel.append(dropEdit);timeEdit.append(puLabel,dropLabel);
+ if(!timeLocked){timeCell.classList.add("time-cell-clickable");timeCell.title+=" | Click to edit";timeCell.addEventListener("click",()=>{timeEdit.classList.toggle("hidden");if(!timeEdit.classList.contains("hidden"))puEdit.focus()})}
+ timeWrap.append(timeEdit);td(row,timeWrap);const passenger=el("div");passenger.className="compact-passenger";passenger.title=[trip.passenger_name,trip.passenger_phone,trip.passenger_email].filter(Boolean).join(" | ");passenger.append(el("strong",trip.passenger_name),el("small",trip.passenger_phone));td(row,passenger);let route=el("div");
+function bostonTimeValue(value){return value?new Date(value).toLocaleTimeString("en-GB",{timeZone:"America/New_York",hour:"2-digit",minute:"2-digit",hour12:false}):""}
+function changedBostonTime(original,time){
+ if(!time||!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(time))throw Error("Enter a valid time");
+ const day=bostonDate(original);const desired=day+"T"+time+":00";
+ let guess=Date.parse(desired+"Z");
+ for(let i=0;i<3;i++){
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(guess));
+  const vals=Object.fromEntries(parts.map(p=>[p.type,p.value]));
+  const actual=vals.year+"-"+vals.month+"-"+vals.day+"T"+vals.hour+":"+vals.minute+":00";
+  guess+=Date.parse(desired+"Z")-Date.parse(actual+"Z");
+ }
+ return new Date(guess).toISOString();
+}
 function openFullCellEditor(field,label){
  const overlay=el("div");overlay.className="cell-editor-overlay";
  const panel=el("div");panel.className="cell-editor-panel";
@@ -370,7 +390,7 @@ const save=el("button","Save");save.addEventListener("click",async()=>{
   return;
  }
  if(!confirm("Confirm changes to this ride?"))return;
- save.disabled=true;try{const cents=price.value.trim()===""?null:Math.round(Number(price.value)*100);if(cents!==null&&(!Number.isSafeInteger(cents)||cents<0))throw Error("Invalid price");await employeeAdminRequest({action:"update_ride",ride_id:trip.id,status:status.value,price_cents:cents,assigned_driver_id:driver.value||null,pickup_address:pickupInput.value,dropoff_address:dropoffInput.value,notes:driverComment.value.trim()||null,internal_notes:internal.value.trim()||null});await load();msg("Ride updated.")}catch(err){msg(err.message,true)}finally{save.disabled=false}
+ save.disabled=true;try{const cents=price.value.trim()===""?null:Math.round(Number(price.value)*100);if(cents!==null&&(!Number.isSafeInteger(cents)||cents<0))throw Error("Invalid price");await employeeAdminRequest({action:"update_ride",ride_id:trip.id,status:status.value,price_cents:cents,assigned_driver_id:driver.value||null,pickup_at:timeLocked?trip.pickup_at:changedBostonTime(trip.pickup_at,puEdit.value),dropoff_at:timeLocked?trip.dropoff_at:(dropEdit.value?(trip.dropoff_at?changedBostonTime(trip.dropoff_at,dropEdit.value):changedBostonTime(trip.pickup_at,dropEdit.value)):null),pickup_address:pickupInput.value,dropoff_address:dropoffInput.value,notes:driverComment.value.trim()||null,internal_notes:internal.value.trim()||null});await load();msg("Ride updated.")}catch(err){msg(err.message,true)}finally{save.disabled=false}
 });td(row,save);
 body.append(row)}updateSelection();msg(trips.length+" ride(s) in selected view.");}catch(err){msg(err.message,true)}finally{refreshing=false}}
 
