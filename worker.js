@@ -196,7 +196,7 @@ async function employeeAdmin(request,env){
     if(pair)records.push({...baseRide,pickup_address:"TEST ONLY — "+destination,dropoff_address:"TEST ONLY — "+origin,pickup_at:localBostonIso(day,returnTime),dropoff_at:localBostonIso(day,"00:00"),notes:tag+" | "+group+" | RETURN | "+instruction+" Return pickup: confirm passenger is ready at lobby or front desk. | TEST DATA, NOT A REAL BOOKING"});
    }
    const inserted=await fetch(SUPABASE+"/rest/v1/trips",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(records)});
-   if(!inserted.ok){console.error("50 demo seed failed",inserted.status,await inserted.text());return reply({error:"Unable to create 50 demo rides"},502)}
+   if(!inserted.ok){const details=await inserted.text();console.error("50 demo seed failed",inserted.status,details);let parsed={};try{parsed=JSON.parse(details)}catch{}const reason=String(parsed.message||parsed.details||"Database rejected demo rides").slice(0,300);return reply({error:"Unable to create 50 demo rides: "+reason},502)}
    const created=await inserted.json();
    await logEmployeeEvent(env,user,staffRole,"seed_demo_50_rides",user.id,{count:created.length,tag});
    return reply({success:true,count:created.length,pairs:20,singles:10});
