@@ -88,6 +88,12 @@ function previewSelectedChanges(kind,value){
 }
 $("bulk-status").addEventListener("change",()=>previewSelectedChanges("status",$("bulk-status").value));
 $("bulk-driver").addEventListener("change",()=>{if(!$("bulk-driver").disabled&&$("bulk-driver").value)previewSelectedChanges("driver",$("bulk-driver").value)});
+function chooseRide(id,additive,toggle=false){
+ const already=selectedTripIds.has(id);
+ if(!additive)selectedTripIds.clear();
+ if(!(toggle&&already))selectedTripIds.add(id);
+ updateSelection();
+}
 function updateSelection(){for(const row of $("trips").querySelectorAll("tr")){const box=row.querySelector(".trip-select");if(!box)continue;const active=selectedTripIds.has(box.value);box.checked=active;row.classList.toggle("ride-selected",active)}for(const option of $("bulk-status").options)if(option.value==="delete")option.hidden=staffRole!=="admin";const pendingSelected=[...selectedTripIds].some(id=>visibleTripStatuses.get(id)==="pending")||[...document.querySelectorAll(".trip-select:checked")].some(input=>visibleTripStatuses.get(input.value)==="pending");const bulkDriver=$("bulk-driver");bulkDriver.disabled=selectedTripIds.size===0||pendingSelected;bulkDriver.title=pendingSelected?"One or more selected rides are Pending. Confirm all Pending rides first.":selectedTripIds.size===0?"Select rides first.":"";if(bulkDriver.disabled)bulkDriver.value="";for(const option of bulkDriver.options){if(option.value)option.disabled=bulkDriver.disabled}const count=selectedTripIds.size;$("bulk-count").textContent=count+" selected";$("bulk-apply").disabled=count===0;$("bulk-clear").disabled=count===0;const all=visibleTripIds.length>0&&visibleTripIds.every(id=>selectedTripIds.has(id));$("bulk-all").checked=all;$("bulk-all").indeterminate=!all&&visibleTripIds.some(id=>selectedTripIds.has(id))}
 // Explorer-style rubber-band selection, only from blank table-cell space.
 let rideDrag=null;
@@ -112,12 +118,12 @@ document.addEventListener("pointermove",event=>{
  const left=Math.min(drag.x,event.clientX),top=Math.min(drag.y,event.clientY);
  const right=Math.max(drag.x,event.clientX),bottom=Math.max(drag.y,event.clientY);
  Object.assign(drag.box.style,{left:left+"px",top:top+"px",width:right-left+"px",height:bottom-top+"px"});
- const next=drag.additive?new Set(drag.initial):new Set();
+ const next=drag.additive?new Set(drag.initial):new Set();let first=null;
  for(const row of dragSurface.querySelectorAll("tr")){
   const rect=row.getBoundingClientRect(),check=row.querySelector(".trip-select");
-  if(check&&rect.right>left&&rect.left<right&&rect.bottom>top&&rect.top<bottom)next.add(check.value);
+  if(check&&rect.right>left&&rect.left<right&&rect.bottom>top&&rect.top<bottom){if(drag.additive)next.add(check.value);else if(!first)first=check.value;}
  }
- selectedTripIds.clear();for(const id of next)selectedTripIds.add(id);
+ if(!drag.additive&&first)next.add(first);selectedTripIds.clear();for(const id of next)selectedTripIds.add(id);
  updateSelection();
 });
 document.addEventListener("pointerup",()=>{
@@ -139,7 +145,7 @@ document.addEventListener("click",event=>{
  for(const checkbox of document.querySelectorAll("#dispatch-panel .trip-select"))checkbox.checked=false;
  updateSelection();
 });
-$("bulk-all").addEventListener("change",e=>{for(const id of visibleTripIds){if(e.target.checked)selectedTripIds.add(id);else selectedTripIds.delete(id)}for(const input of document.querySelectorAll(".trip-select"))input.checked=selectedTripIds.has(input.value);updateSelection()});
+$("bulk-all").addEventListener("click",e=>{e.preventDefault();if(!e.ctrlKey&&!e.metaKey){msg("Hold Ctrl to select multiple rides.",true);updateSelection();return}const all=visibleTripIds.every(id=>selectedTripIds.has(id));for(const id of visibleTripIds){if(all)selectedTripIds.delete(id);else selectedTripIds.add(id)}updateSelection()});
 $("bulk-clear").addEventListener("click",()=>{selectedTripIds.clear();for(const input of document.querySelectorAll(".trip-select"))input.checked=false;updateSelection()});
 $("bulk-driver").addEventListener("focus",updateSelection);
 $("bulk-driver").addEventListener("change",()=>{updateSelection();if($("bulk-driver").disabled)$("bulk-driver").value=""});
@@ -345,12 +351,12 @@ try{
  const byId=new Map(extra.map(t=>[t.id,t.dropoff_at]));
  for(const t of activeTrips)if(byId.has(t.id))t.dropoff_at=byId.get(t.id);
 }catch(error){console.warn("Drop-off times could not be loaded",error)}
-const inferredRoundTrips=inferredRoundTripIds(activeTrips);const trips=activeTrips.filter(visibleTrip).sort(compareDispatchRides).slice(0,200);const body=$("trips");body.replaceChildren();visibleTripIds=trips.map(t=>t.id);visibleTripStatuses=new Map(trips.map(t=>[t.id,t.status]));for(const id of [...selectedTripIds])if(!visibleTripIds.includes(id))selectedTripIds.delete(id);for(const trip of trips){const row=el("tr");row.className=tripColor(trip.status);if((trip.internal_notes||"").trim())row.classList.add("has-internal-comments");else if(trip.status==="cancelled")row.classList.add("cancelled-no-internal-comments");const check=el("input");check.type="checkbox";check.className="trip-select";check.value=trip.id;check.checked=selectedTripIds.has(trip.id);check.setAttribute("aria-label","Select ride for "+trip.passenger_name);check.addEventListener("change",()=>{if(check.checked)selectedTripIds.add(trip.id);else selectedTripIds.delete(trip.id);updateSelection()});td(row,check);
+const inferredRoundTrips=inferredRoundTripIds(activeTrips);const trips=activeTrips.filter(visibleTrip).sort(compareDispatchRides).slice(0,200);const body=$("trips");body.replaceChildren();visibleTripIds=trips.map(t=>t.id);visibleTripStatuses=new Map(trips.map(t=>[t.id,t.status]));for(const id of [...selectedTripIds])if(!visibleTripIds.includes(id))selectedTripIds.delete(id);for(const trip of trips){const row=el("tr");row.className=tripColor(trip.status);if((trip.internal_notes||"").trim())row.classList.add("has-internal-comments");else if(trip.status==="cancelled")row.classList.add("cancelled-no-internal-comments");const check=el("input");check.type="checkbox";check.className="trip-select";check.value=trip.id;check.checked=selectedTripIds.has(trip.id);check.setAttribute("aria-label","Select ride for "+trip.passenger_name);check.addEventListener("click",event=>{event.stopPropagation();event.preventDefault();chooseRide(trip.id,event.ctrlKey||event.metaKey,true)});td(row,check);
 const autoSelectForEdit=(event)=>{
  const target=event.target;
  if(target===check||target.closest?.('button')?.textContent==="Save")return;
  if(!target.closest?.('input:not([type="checkbox"]),select,textarea,.compact-ellipsis,.compact-route-item button'))return;
- if(!selectedTripIds.has(trip.id)){selectedTripIds.add(trip.id);check.checked=true;updateSelection()}
+ if(!selectedTripIds.has(trip.id))chooseRide(trip.id,event.ctrlKey||event.metaKey);
 };
 row.addEventListener("focusin",autoSelectForEdit);
 row.addEventListener("pointerdown",autoSelectForEdit);
@@ -359,9 +365,7 @@ row.addEventListener("change",autoSelectForEdit);
 row.addEventListener("click",event=>{
  const target=event.target;
  if(target.closest("input,textarea,select,button,a,label,.compact-ellipsis,.time-cell-clickable,[contenteditable],.cell-expandable"))return;
- const selected=!selectedTripIds.has(trip.id);
- if(selected)selectedTripIds.add(trip.id);else selectedTripIds.delete(trip.id);
- check.checked=selected;updateSelection();
+ chooseRide(trip.id,event.ctrlKey||event.metaKey,true);
 });
 const pu=new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"});const doTime=trip.dropoff_at?new Date(trip.dropoff_at).toLocaleString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"}):"—";const timeCell=el("span","PU: "+pu+"  ·  DropOff: "+doTime);timeCell.title="Pickup: "+new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"full",timeStyle:"short"})+" | Drop-off: "+(trip.dropoff_at?new Date(trip.dropoff_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"full",timeStyle:"short"}):"Not set");const timeWrap=el("div");timeWrap.className="time-cell-wrap";timeWrap.append(timeCell);
  const timeLocked=["completed","cancelled"].includes(trip.status);
@@ -380,7 +384,7 @@ const pu=new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_
  for(const input of [puEdit,dropEdit])input.addEventListener("input",previewTime);
  timeEdit.addEventListener("keydown",event=>{if(event.key==="Escape"){event.preventDefault();cancelTime()}});
  timeActions.append(timeCancel,timeApply);timeEdit.append(timeActions);
- if(!timeLocked){timeCell.classList.add("time-cell-clickable");timeCell.title+=" | Double-click to edit";timeCell.addEventListener("dblclick",()=>{if(timeEdit.classList.contains("hidden")){document.body.append(timeEdit);timeEdit.classList.remove("hidden");if(!selectedTripIds.has(trip.id)){selectedTripIds.add(trip.id);check.checked=true;updateSelection()}puEdit.focus()}else cancelTime()})}
+ if(!timeLocked){timeCell.classList.add("time-cell-clickable");timeCell.title+=" | Double-click to edit";timeCell.addEventListener("dblclick",()=>{if(timeEdit.classList.contains("hidden")){document.body.append(timeEdit);timeEdit.classList.remove("hidden");if(!selectedTripIds.has(trip.id))chooseRide(trip.id,false);puEdit.focus()}else cancelTime()})}
  timeWrap.append(timeEdit);td(row,timeWrap);const passenger=el("div");passenger.className="compact-passenger";passenger.title=[trip.passenger_name,trip.passenger_phone,trip.passenger_email].filter(Boolean).join(" | ");function contactAction(field,label,value){
  const button=el("button",value||"—");button.type="button";button.className="contact-action-trigger";button.title="Click for Copy; double-click for Edit "+label;
  button.addEventListener("click",event=>{
