@@ -148,7 +148,7 @@ async function employeeAdmin(request,env){
   }
   if(body.action==="update_ride"){
    if(typeof body.ride_id!=="string"||!/^[0-9a-f-]{36}$/i.test(body.ride_id))return reply({error:"Invalid ride"},400);
-   const currentResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,status,assigned_driver_id,pickup_address,dropoff_address,price_cents,internal_notes,notes&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
+   const currentResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,status,assigned_driver_id,pickup_at,dropoff_at,pickup_address,dropoff_address,price_cents,internal_notes,notes&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
    if(!currentResponse.ok)return reply({error:"Unable to load ride"},502);
    const current=(await currentResponse.json())[0];
    if(!current)return reply({error:"Ride not found"},404);
@@ -157,6 +157,12 @@ async function employeeAdmin(request,env){
    if(body.price_cents!==null&&(!Number.isSafeInteger(body.price_cents)||body.price_cents<0))return reply({error:"Invalid price"},400);
    if(body.internal_notes!==null&&(typeof body.internal_notes!=="string"||body.internal_notes.length>4000))return reply({error:"Invalid internal notes"},400);
    if(body.notes!==null&&(typeof body.notes!=="string"||body.notes.length>4000))return reply({error:"Invalid driver notes"},400);
+   const parseTime=v=>typeof v==="string"&&Number.isFinite(Date.parse(v))?new Date(v).toISOString():null;
+   const pickupTime=parseTime(body.pickup_at);
+   const dropoffTime=body.dropoff_at===null?null:parseTime(body.dropoff_at);
+   if(!pickupTime||(body.dropoff_at!==null&&!dropoffTime))return reply({error:"Invalid pickup or drop-off time"},400);
+   const timeChanged=pickupTime!==new Date(current.pickup_at).toISOString()||dropoffTime!==(current.dropoff_at?new Date(current.dropoff_at).toISOString():null);
+   if(timeChanged&&["completed","cancelled"].includes(current.status))return reply({error:"Time cannot be changed after a ride is Completed or Cancelled."},409);
    const driverId=body.assigned_driver_id||null;
    if(driverId!==null&&(typeof driverId!=="string"||!/^[0-9a-f-]{36}$/i.test(driverId)))return reply({error:"Invalid driver"},400);
    
@@ -167,7 +173,7 @@ async function employeeAdmin(request,env){
    }
    if(body.status==="assigned"&&!driverId)return reply({error:"Select a driver before saving Assigned status."},409);
    const nextStatus=driverId!==null&&["confirmed","assigned"].includes(body.status)?"assigned":body.status;
-   const changes={status:nextStatus,pickup_address:body.pickup_address.trim(),dropoff_address:body.dropoff_address.trim(),price_cents:body.price_cents,assigned_driver_id:driverId,notes:body.notes,internal_notes:body.internal_notes,updated_at:new Date().toISOString()};
+   const changes={status:nextStatus,pickup_at:pickupTime,dropoff_at:dropoffTime,pickup_address:body.pickup_address.trim(),dropoff_address:body.dropoff_address.trim(),price_cents:body.price_cents,assigned_driver_id:driverId,notes:body.notes,internal_notes:body.internal_notes,updated_at:new Date().toISOString()};
    const saved=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(changes)});
    if(!saved.ok)return reply({error:"Unable to save ride changes"},502);
    await logEmployeeEvent(env,user,staffRole,"update_ride",user.id,{ride_id:body.ride_id,changes:{status:nextStatus,pickup_address:changes.pickup_address,dropoff_address:changes.dropoff_address,assigned_driver_id:driverId,driver_notes_changed:current.notes!==body.notes}});
