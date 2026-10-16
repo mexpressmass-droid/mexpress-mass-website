@@ -132,15 +132,16 @@ async function employeeAdmin(request,env){
    if(body.internal_notes!==null&&(typeof body.internal_notes!=="string"||body.internal_notes.length>4000))return reply({error:"Invalid internal notes"},400);
    const driverId=body.assigned_driver_id||null;
    if(driverId!==null&&(typeof driverId!=="string"||!/^[0-9a-f-]{36}$/i.test(driverId)))return reply({error:"Invalid driver"},400);
-   if(body.status==="pending"&&driverId!==null)return reply({error:"Pending rides cannot be assigned to a driver. Change the status first."},400);
+   
    if(driverId!==null&&driverId!==current.assigned_driver_id){
     const driverResponse=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&id=eq."+encodeURIComponent(driverId)+"&role=eq.driver&is_active=eq.true&limit=1",{headers:serviceHeaders});
     if(!driverResponse.ok||!(await driverResponse.json()).length)return reply({error:"Only active drivers can be assigned"},400);
    }
-   const changes={status:body.status,pickup_address:body.pickup_address.trim(),dropoff_address:body.dropoff_address.trim(),price_cents:body.price_cents,assigned_driver_id:driverId,internal_notes:body.internal_notes,updated_at:new Date().toISOString()};
+   const nextStatus=driverId!==null&&["pending","confirmed","assigned"].includes(body.status)?"assigned":body.status;
+   const changes={status:nextStatus,pickup_address:body.pickup_address.trim(),dropoff_address:body.dropoff_address.trim(),price_cents:body.price_cents,assigned_driver_id:driverId,internal_notes:body.internal_notes,updated_at:new Date().toISOString()};
    const saved=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(changes)});
    if(!saved.ok)return reply({error:"Unable to save ride changes"},502);
-   await logEmployeeEvent(env,user,staffRole,"update_ride",user.id,{ride_id:body.ride_id,changes:{status:body.status,pickup_address:changes.pickup_address,dropoff_address:changes.dropoff_address,assigned_driver_id:driverId}});
+   await logEmployeeEvent(env,user,staffRole,"update_ride",user.id,{ride_id:body.ride_id,changes:{status:nextStatus,pickup_address:changes.pickup_address,dropoff_address:changes.dropoff_address,assigned_driver_id:driverId}});
    return reply({success:true});
   }
   if(body.action==="seed_demo_rides"){
