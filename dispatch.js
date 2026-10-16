@@ -91,7 +91,8 @@ $("bulk-driver").addEventListener("change",()=>{if(!$("bulk-driver").disabled&&$
 function chooseRide(id,additive,toggle=false){
  const already=selectedTripIds.has(id);
  if(!additive)selectedTripIds.clear();
- if(!additive||!(toggle&&already))selectedTripIds.add(id);
+ // A second click on the same selected ride deselects it, even without Ctrl.
+ if(!(toggle&&already))selectedTripIds.add(id);
  updateSelection();
 }
 function updateSelection(){for(const row of $("trips").querySelectorAll("tr")){const box=row.querySelector(".trip-select");if(!box)continue;const active=selectedTripIds.has(box.value);box.checked=active;row.classList.toggle("ride-selected",active)}
