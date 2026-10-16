@@ -137,6 +137,7 @@ async function employeeAdmin(request,env){
    if(!allowed.includes(body.status))return reply({error:"Invalid status"},400);
    if(!Array.isArray(body.ride_ids)||body.ride_ids.length<1||body.ride_ids.length>200||new Set(body.ride_ids).size!==body.ride_ids.length||body.ride_ids.some(id=>typeof id!=="string"||!/^[0-9a-f-]{36}$/i.test(id)))return reply({error:"Invalid ride selection"},400);
    const ids=body.ride_ids.join(",");
+   if(body.status==="assigned"){const check=await fetch(SUPABASE+"/rest/v1/trips?select=id,assigned_driver_id&id=in.("+ids+")",{headers:serviceHeaders});if(!check.ok)return reply({error:"Unable to validate drivers"},502);const rides=await check.json();if(rides.length!==body.ride_ids.length||rides.some(t=>!t.assigned_driver_id))return reply({error:"Select a driver for every selected ride before saving Assigned status."},409)}
    const patch={status:body.status,updated_at:new Date().toISOString()};
    if(body.status==="pending")patch.assigned_driver_id=null;
    const response=await fetch(SUPABASE+"/rest/v1/trips?id=in.("+ids+")",{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(patch)});
@@ -163,6 +164,7 @@ async function employeeAdmin(request,env){
     const driverResponse=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&id=eq."+encodeURIComponent(driverId)+"&role=eq.driver&is_active=eq.true&limit=1",{headers:serviceHeaders});
     if(!driverResponse.ok||!(await driverResponse.json()).length)return reply({error:"Only active drivers can be assigned"},400);
    }
+   if(body.status==="assigned"&&!driverId)return reply({error:"Select a driver before saving Assigned status."},409);
    const nextStatus=driverId!==null&&["confirmed","assigned"].includes(body.status)?"assigned":body.status;
    const changes={status:nextStatus,pickup_address:body.pickup_address.trim(),dropoff_address:body.dropoff_address.trim(),price_cents:body.price_cents,assigned_driver_id:driverId,internal_notes:body.internal_notes,updated_at:new Date().toISOString()};
    const saved=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(changes)});
