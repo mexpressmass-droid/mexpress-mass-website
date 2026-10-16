@@ -75,6 +75,19 @@ async function employeeAdmin(request,env){
    await logEmployeeEvent(env,user,staffRole,body.event,user.id,{source:"web",...((body.context&&typeof body.context==="object")?{context:String(body.context.value||"").slice(0,120)}:{})});
    return reply({success:true});
   }
+  if(body.action==="bulk_update_status"){
+   const allowed=["pending","confirmed","assigned","on_the_way","arrived","boarded","completed","cancelled"];
+   if(!allowed.includes(body.status))return reply({error:"Invalid status"},400);
+   if(!Array.isArray(body.ride_ids)||body.ride_ids.length<1||body.ride_ids.length>200||new Set(body.ride_ids).size!==body.ride_ids.length||body.ride_ids.some(id=>typeof id!=="string"||!/^[0-9a-f-]{36}$/i.test(id)))return reply({error:"Invalid ride selection"},400);
+   const ids=body.ride_ids.join(",");
+   const patch={status:body.status,updated_at:new Date().toISOString()};
+   if(body.status==="pending")patch.assigned_driver_id=null;
+   const response=await fetch(SUPABASE+"/rest/v1/trips?id=in.("+ids+")",{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(patch)});
+   if(!response.ok){console.error("Bulk status failed",response.status,await response.text());return reply({error:"Unable to update selected rides"},502)}
+   const updated=await response.json();
+   await logEmployeeEvent(env,user,staffRole,"bulk_update_status",user.id,{count:updated.length,status:body.status,ride_ids:body.ride_ids});
+   return reply({success:true,count:updated.length,requested:body.ride_ids.length});
+  }
   if(body.action==="update_ride"){
    if(typeof body.ride_id!=="string"||!/^[0-9a-f-]{36}$/i.test(body.ride_id))return reply({error:"Invalid ride"},400);
    const currentResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,status,assigned_driver_id,pickup_address,dropoff_address,price_cents,internal_notes&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
