@@ -176,7 +176,13 @@ async function employeeAdmin(request,env){
    const changes={status:nextStatus,pickup_at:pickupTime,dropoff_at:dropoffTime,pickup_address:body.pickup_address.trim(),dropoff_address:body.dropoff_address.trim(),price_cents:body.price_cents,assigned_driver_id:driverId,notes:body.notes,internal_notes:body.internal_notes,updated_at:new Date().toISOString()};
    const saved=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(changes)});
    if(!saved.ok)return reply({error:"Unable to save ride changes"},502);
-   await logEmployeeEvent(env,user,staffRole,"update_ride",user.id,{ride_id:body.ride_id,changes:{status:nextStatus,pickup_address:changes.pickup_address,dropoff_address:changes.dropoff_address,assigned_driver_id:driverId,driver_notes_changed:current.notes!==body.notes}});
+   const auditChanges={};
+   for(const field of ["status","pickup_at","dropoff_at","pickup_address","dropoff_address","price_cents","assigned_driver_id","notes","internal_notes"]){
+    const before=current[field]??null,after=changes[field]??null;
+    if(String(before)!==String(after))auditChanges[field]={before,after};
+   }
+   if(Object.keys(auditChanges).length)await logEmployeeEvent(env,user,staffRole,"update_ride",body.ride_id,{ride_id:body.ride_id,changes:auditChanges});
+
    return reply({success:true});
   }
   if(body.action==="seed_demo_50_rides"){
