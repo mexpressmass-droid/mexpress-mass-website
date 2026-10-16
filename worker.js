@@ -107,6 +107,30 @@ async function employeeAdmin(request,env){
    await logEmployeeEvent(env,user,staffRole,"archive_rides",user.id,{count:archived.length,ride_ids:body.ride_ids});
    return reply({success:true,count:archived.length,requested:body.ride_ids.length});
   }
+  if(body.action==="bulk_assign_driver"){
+   if(!Array.isArray(body.ride_ids)||body.ride_ids.length<1||body.ride_ids.length>200||new Set(body.ride_ids).size!==body.ride_ids.length||body.ride_ids.some(id=>typeof id!=="string"||!/^[0-9a-f-]{36}$/i.test(id)))return reply({error:"Invalid ride selection"},400);
+   const driverId=body.assigned_driver_id;
+   if(typeof driverId!=="string"||!/^[0-9a-f-]{36}$/i.test(driverId))return reply({error:"Select a valid driver"},400);
+   const driverResponse=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&id=eq."+encodeURIComponent(driverId)+"&role=eq.driver&is_active=eq.true&limit=1",{headers:serviceHeaders});
+   if(!driverResponse.ok||!(await driverResponse.json()).length)return reply({error:"Only active drivers can be assigned"},400);
+   const ids=body.ride_ids.join(",");
+   const existingResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,status,archived_at&id=in.("+ids+")",{headers:serviceHeaders});
+   if(!existingResponse.ok)return reply({error:"Unable to check selected rides"},502);
+   const existing=await existingResponse.json();
+   if(existing.length!==body.ride_ids.length||existing.some(t=>t.archived_at!==null))return reply({error:"One or more rides are missing or archived. Refresh and retry."},409);
+   const now=new Date().toISOString();
+   let updatedCount=0;
+   for(const group of [existing.filter(t=>["pending","confirmed","assigned"].includes(t.status)),existing.filter(t=>!["pending","confirmed","assigned"].includes(t.status))]){
+    if(!group.length)continue;
+    const patch={assigned_driver_id:driverId,updated_at:now};
+    if(["pending","confirmed","assigned"].includes(group[0].status))patch.status="assigned";
+    const response=await fetch(SUPABASE+"/rest/v1/trips?id=in.("+group.map(t=>t.id).join(",")+")&archived_at=is.null",{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(patch)});
+    if(!response.ok){console.error("Bulk assign failed",response.status,await response.text());return reply({error:"Unable to assign all selected rides. Refresh to review."},502)}
+    updatedCount+=(await response.json()).length;
+   }
+   await logEmployeeEvent(env,user,staffRole,"bulk_assign_driver",user.id,{count:updatedCount,driver_id:driverId,ride_ids:body.ride_ids});
+   return reply({success:true,count:updatedCount,requested:body.ride_ids.length});
+  }
   if(body.action==="bulk_update_status"){
    const allowed=["pending","confirmed","assigned","on_the_way","arrived","boarded","completed","cancelled"];
    if(!allowed.includes(body.status))return reply({error:"Invalid status"},400);
