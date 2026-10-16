@@ -89,6 +89,14 @@ function previewSelectedChanges(kind,value){
 $("bulk-status").addEventListener("change",()=>previewSelectedChanges("status",$("bulk-status").value));
 $("bulk-driver").addEventListener("change",()=>{if(!$("bulk-driver").disabled&&$("bulk-driver").value)previewSelectedChanges("driver",$("bulk-driver").value)});
 function updateSelection(){for(const option of $("bulk-status").options)if(option.value==="delete")option.hidden=staffRole!=="admin";const pendingSelected=[...selectedTripIds].some(id=>visibleTripStatuses.get(id)==="pending")||[...document.querySelectorAll(".trip-select:checked")].some(input=>visibleTripStatuses.get(input.value)==="pending");const bulkDriver=$("bulk-driver");bulkDriver.disabled=selectedTripIds.size===0||pendingSelected;bulkDriver.title=pendingSelected?"One or more selected rides are Pending. Confirm all Pending rides first.":selectedTripIds.size===0?"Select rides first.":"";if(bulkDriver.disabled)bulkDriver.value="";for(const option of bulkDriver.options){if(option.value)option.disabled=bulkDriver.disabled}const count=selectedTripIds.size;$("bulk-count").textContent=count+" selected";$("bulk-apply").disabled=count===0;$("bulk-clear").disabled=count===0;const all=visibleTripIds.length>0&&visibleTripIds.every(id=>selectedTripIds.has(id));$("bulk-all").checked=all;$("bulk-all").indeterminate=!all&&visibleTripIds.some(id=>selectedTripIds.has(id))}
+document.addEventListener("click",event=>{
+ if(!selectedTripIds.size)return;
+ const target=event.target;
+ if(target.closest("#dispatch-panel tr,#dispatch-panel button,#dispatch-panel input,#dispatch-panel select,#dispatch-panel textarea,#dispatch-panel label,.cell-editor-overlay,.time-editor"))return;
+ selectedTripIds.clear();
+ for(const checkbox of document.querySelectorAll("#dispatch-panel .trip-select"))checkbox.checked=false;
+ updateSelection();
+});
 $("bulk-all").addEventListener("change",e=>{for(const id of visibleTripIds){if(e.target.checked)selectedTripIds.add(id);else selectedTripIds.delete(id)}for(const input of document.querySelectorAll(".trip-select"))input.checked=selectedTripIds.has(input.value);updateSelection()});
 $("bulk-clear").addEventListener("click",()=>{selectedTripIds.clear();for(const input of document.querySelectorAll(".trip-select"))input.checked=false;updateSelection()});
 $("bulk-driver").addEventListener("focus",updateSelection);
@@ -306,6 +314,13 @@ row.addEventListener("focusin",autoSelectForEdit);
 row.addEventListener("pointerdown",autoSelectForEdit);
 row.addEventListener("input",autoSelectForEdit);
 row.addEventListener("change",autoSelectForEdit);
+row.addEventListener("click",event=>{
+ const target=event.target;
+ if(target.closest("input,textarea,select,button,a,label,.compact-ellipsis,.time-cell-clickable,[contenteditable],.cell-expandable"))return;
+ const selected=!selectedTripIds.has(trip.id);
+ if(selected)selectedTripIds.add(trip.id);else selectedTripIds.delete(trip.id);
+ check.checked=selected;updateSelection();
+});
 const pu=new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"});const doTime=trip.dropoff_at?new Date(trip.dropoff_at).toLocaleString("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"}):"—";const timeCell=el("span","PU: "+pu+"  ·  DropOff: "+doTime);timeCell.title="Pickup: "+new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"full",timeStyle:"short"})+" | Drop-off: "+(trip.dropoff_at?new Date(trip.dropoff_at).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"full",timeStyle:"short"}):"Not set");const timeWrap=el("div");timeWrap.className="time-cell-wrap";timeWrap.append(timeCell);
  const timeLocked=["completed","cancelled"].includes(trip.status);
  const puEdit=el("input");puEdit.type="time";puEdit.value=bostonTimeValue(trip.pickup_at);puEdit.disabled=timeLocked;puEdit.title=timeLocked?"Time locked for completed or cancelled rides":"Edit pickup time";
