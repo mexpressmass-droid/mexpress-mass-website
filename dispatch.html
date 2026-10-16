@@ -200,6 +200,9 @@ body.ride-dragging,body.ride-dragging #dispatch-panel{user-select:none!important
 #dispatch-panel tr.has-internal-comments td:nth-child(11) textarea,#dispatch-panel tr.cancelled-no-internal-comments td:nth-child(11) textarea{border-color:initial!important;box-shadow:none!important;background:initial!important}
 #dispatch-panel tr.has-internal-comments td:nth-child(12) textarea{border:2px solid #d52236!important;box-shadow:0 0 0 1px #d5223626!important;background:#fff9fa!important}
 #dispatch-panel tr.cancelled-no-internal-comments td:nth-child(12) textarea{border:2px solid #2274e5!important;box-shadow:0 0 0 1px #2274e526!important;background:#f5faff!important}
+/* Keep bulk actions visible while scrolling selected rides, returning to original place on scroll up. */
+#dispatch-panel .bulk-toolbar{position:sticky;top:0;z-index:120;background:#fff;border:1px solid #d7e1ee;border-radius:8px;padding:9px 12px;box-shadow:0 3px 12px rgba(15,35,65,.09)}
+#dispatch-panel .bulk-toolbar:has(#bulk-count:not(:empty)){scroll-margin-top:8px}
 </style></head>
 <body><header><strong>M EXPRESS <span style="color:white">DISPATCH</span></strong><button id="logout" class="hidden">Sign out</button></header><main>
 <section id="login-panel"><h2>Dispatcher sign in</h2><p class="muted">Authorized M Express staff only.</p><form id="login-form"><label for="email">Username or email</label><input id="email" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required><label for="password">Password</label><div class="password-field"><input id="password" type="password" autocomplete="current-password" required><button id="toggle-password" type="button" class="password-toggle" aria-label="Show password" aria-pressed="false">Show</button></div><p><button type="submit" id="login-button">Sign in</button></p><p id="login-error" class="error" role="alert"></p></form></section>
