@@ -66,10 +66,70 @@ function updateSelection(){const count=selectedTripIds.size;$("bulk-count").text
 $("bulk-all").addEventListener("change",e=>{for(const id of visibleTripIds){if(e.target.checked)selectedTripIds.add(id);else selectedTripIds.delete(id)}for(const input of document.querySelectorAll(".trip-select"))input.checked=selectedTripIds.has(input.value);updateSelection()});
 $("bulk-clear").addEventListener("click",()=>{selectedTripIds.clear();for(const input of document.querySelectorAll(".trip-select"))input.checked=false;updateSelection()});
 $("bulk-archive").addEventListener("click",async()=>{const ids=[...selectedTripIds];if(!ids.length)return;if(!confirm("Move "+ids.length+" selected Completed/Cancelled ride(s) to Archive?"))return;const b=$("bulk-archive");b.disabled=true;try{const res=await employeeAdminRequest({action:"archive_rides",ride_ids:ids});selectedTripIds.clear();await load();msg(res.count+" ride(s) moved to Archive.")}catch(e){msg(e.message,true)}finally{b.disabled=false;updateSelection()}});
-$("bulk-delete").addEventListener("click",()=>{if(staffRole!=="admin")return;msg("Permanent deletion is not enabled yet. No rides were deleted.",true)});
-let archiveRides=[];
-async function loadArchive(){const notice=$("archive-notice");notice.textContent="Loading archive...";try{const result=await employeeAdminRequest({action:"archive_list"});archiveRides=result.rides||[];const d=$("archive-driver"),old=d.value;d.replaceChildren(new Option("All drivers",""));for(const id of [...new Set(archiveRides.map(t=>t.assigned_driver_id).filter(Boolean))]){const profile=allDriverProfiles.find(p=>p.id===id);d.add(new Option(profile?profile.display_name+" ("+profile.username+")":"Historical driver "+id.slice(0,8),id))}d.value=old;renderArchive()}catch(e){notice.textContent=e.message}}
-function renderArchive(){const body=$("archive-trips");body.replaceChildren();const driver=$("archive-driver").value,status=$("archive-status").value,period=$("archive-period").value,date=$("archive-date").value;const end=period==="day"?addDays(date,1):period==="week"?addDays(date,7):period==="year"?(Number(date.slice(0,4))+1)+"-01-01":null;const start=period==="year"?date.slice(0,4)+"-01-01":date;let count=0;for(const t of archiveRides){const d=bostonDate(t.pickup_at);if(driver&&t.assigned_driver_id!==driver||status&&t.status!==status||period!=="all"&&date&&(d<start||d>=end))continue;const tr=el("tr");for(const value of [new Date(t.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York"}),t.passenger_name,t.pickup_address+" → "+t.dropoff_address,t.status,allDriverProfiles.find(p=>p.id===t.assigned_driver_id)?.display_name||"Unassigned / historical",t.price_cents==null?"—":"$"+(t.price_cents/100).toFixed(2),new Date(t.archived_at).toLocaleString("en-US",{timeZone:"America/New_York"})])td(tr,el("span",value));body.append(tr);count++}$("archive-notice").textContent=count+" archived ride(s) shown."}
+async function permanentlyDeleteRides(ids,after){
+ if(staffRole!=="admin"||!ids.length)return;
+ if(!confirm("PERMANENTLY DELETE "+ids.length+" ride(s) and their status history? This cannot be undone."))return;
+ const typed=prompt("Type DELETE PERMANENTLY to confirm deleting "+ids.length+" ride(s):");
+ if(typed!=="DELETE PERMANENTLY")return;
+ try{
+  const result=await employeeAdminRequest({action:"delete_rides",ride_ids:ids,confirmation:typed});
+  if(result.count!==ids.length)throw Error("Server deleted "+result.count+" of "+ids.length+" rides. Refresh to inspect.");
+  await after();
+ }catch(e){alert("Delete failed: "+e.message)}
+}
+$("bulk-delete").addEventListener("click",async()=>{const ids=[...selectedTripIds];await permanentlyDeleteRides(ids,async()=>{selectedTripIds.clear();await load();msg(ids.length+" ride(s) permanently deleted.")})});
+let archiveRides=[],selectedArchivedIds=new Set(),visibleArchivedIds=[];
+function updateArchiveSelection(){
+ const count=selectedArchivedIds.size;
+ $("archive-selected-count").textContent=count+" selected";
+ $("archive-delete").disabled=count===0;
+ const all=visibleArchivedIds.length>0&&visibleArchivedIds.every(id=>selectedArchivedIds.has(id));
+ $("archive-select-all").checked=all;
+ $("archive-select-all").indeterminate=!all&&visibleArchivedIds.some(id=>selectedArchivedIds.has(id));
+}
+$("archive-select-all").addEventListener("change",e=>{
+ for(const id of visibleArchivedIds){if(e.target.checked)selectedArchivedIds.add(id);else selectedArchivedIds.delete(id)}
+ for(const input of document.querySelectorAll(".archive-select"))input.checked=selectedArchivedIds.has(input.value);
+ updateArchiveSelection();
+});
+$("archive-delete").addEventListener("click",async()=>{
+ const ids=[...selectedArchivedIds];
+ await permanentlyDeleteRides(ids,async()=>{selectedArchivedIds.clear();await loadArchive();$("archive-notice").textContent=ids.length+" ride(s) permanently deleted."});
+});
+async function loadArchive(){
+ const notice=$("archive-notice");notice.textContent="Loading archive...";
+ $("archive-delete").classList.toggle("hidden",staffRole!=="admin");
+ try{
+  const result=await employeeAdminRequest({action:"archive_list"});
+  archiveRides=result.rides||[];
+  for(const id of [...selectedArchivedIds])if(!archiveRides.some(t=>t.id===id))selectedArchivedIds.delete(id);
+  const d=$("archive-driver"),old=d.value;
+  d.replaceChildren(new Option("All drivers",""));
+  for(const id of [...new Set(archiveRides.map(t=>t.assigned_driver_id).filter(Boolean))]){
+   const profile=allDriverProfiles.find(p=>p.id===id);
+   d.add(new Option(profile?profile.display_name+" ("+profile.username+")":"Historical driver "+id.slice(0,8),id));
+  }
+  d.value=old;renderArchive();
+ }catch(e){notice.textContent=e.message}
+}
+function renderArchive(){
+ const body=$("archive-trips");body.replaceChildren();
+ const driver=$("archive-driver").value,status=$("archive-status").value,period=$("archive-period").value,date=$("archive-date").value;
+ const end=period==="day"?addDays(date,1):period==="week"?addDays(date,7):period==="year"?(Number(date.slice(0,4))+1)+"-01-01":null;
+ const start=period==="year"?date.slice(0,4)+"-01-01":date;
+ let count=0;visibleArchivedIds=[];
+ for(const t of archiveRides){
+  const d=bostonDate(t.pickup_at);
+  if(driver&&t.assigned_driver_id!==driver||status&&t.status!==status||period!=="all"&&date&&(d<start||d>=end))continue;
+  const tr=el("tr");
+  const cell=el("td"),input=el("input");input.type="checkbox";input.className="archive-select";input.value=t.id;input.checked=selectedArchivedIds.has(t.id);
+  input.addEventListener("change",()=>{if(input.checked)selectedArchivedIds.add(t.id);else selectedArchivedIds.delete(t.id);updateArchiveSelection()});
+  cell.append(input);tr.append(cell);
+  for(const value of [new Date(t.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York"}),t.passenger_name,t.pickup_address+" → "+t.dropoff_address,t.status,allDriverProfiles.find(p=>p.id===t.assigned_driver_id)?.display_name||"Unassigned / historical",t.price_cents==null?"—":"$"+(t.price_cents/100).toFixed(2),new Date(t.archived_at).toLocaleString("en-US",{timeZone:"America/New_York"})])td(tr,el("span",value));
+  body.append(tr);visibleArchivedIds.push(t.id);count++;
+ }
+ $("archive-notice").textContent=count+" archived ride(s) shown.";updateArchiveSelection();
+}
 for(const id of ["archive-driver","archive-status","archive-period","archive-date"])$(id).addEventListener("change",renderArchive);
 $("archive-refresh").addEventListener("click",loadArchive);
 $("archive-date").value=bostonDate(new Date());
