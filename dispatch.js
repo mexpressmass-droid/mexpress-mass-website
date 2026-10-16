@@ -91,10 +91,17 @@ $("bulk-driver").addEventListener("change",()=>{if(!$("bulk-driver").disabled&&$
 function chooseRide(id,additive,toggle=false){
  const already=selectedTripIds.has(id);
  if(!additive)selectedTripIds.clear();
- if(!(toggle&&already))selectedTripIds.add(id);
+ if(!additive||!(toggle&&already))selectedTripIds.add(id);
  updateSelection();
 }
-function updateSelection(){for(const row of $("trips").querySelectorAll("tr")){const box=row.querySelector(".trip-select");if(!box)continue;const active=selectedTripIds.has(box.value);box.checked=active;row.classList.toggle("ride-selected",active)}for(const option of $("bulk-status").options)if(option.value==="delete")option.hidden=staffRole!=="admin";const pendingSelected=[...selectedTripIds].some(id=>visibleTripStatuses.get(id)==="pending")||[...document.querySelectorAll(".trip-select:checked")].some(input=>visibleTripStatuses.get(input.value)==="pending");const bulkDriver=$("bulk-driver");bulkDriver.disabled=selectedTripIds.size===0||pendingSelected;bulkDriver.title=pendingSelected?"One or more selected rides are Pending. Confirm all Pending rides first.":selectedTripIds.size===0?"Select rides first.":"";if(bulkDriver.disabled)bulkDriver.value="";for(const option of bulkDriver.options){if(option.value)option.disabled=bulkDriver.disabled}const count=selectedTripIds.size;$("bulk-count").textContent=count+" selected";$("bulk-apply").disabled=count===0;$("bulk-clear").disabled=count===0;const all=visibleTripIds.length>0&&visibleTripIds.every(id=>selectedTripIds.has(id));$("bulk-all").checked=all;$("bulk-all").indeterminate=!all&&visibleTripIds.some(id=>selectedTripIds.has(id))}
+function updateSelection(){for(const row of $("trips").querySelectorAll("tr")){const box=row.querySelector(".trip-select");if(!box)continue;const active=selectedTripIds.has(box.value);box.checked=active;row.classList.toggle("ride-selected",active)}
+ const rows=[...$("trips").querySelectorAll("tr")];
+ for(let i=0;i<rows.length;i++){
+  const current=rows[i].classList.contains("ride-selected");
+  rows[i].classList.toggle("ride-group-start",current&&(i===0||!rows[i-1].classList.contains("ride-selected")));
+  rows[i].classList.toggle("ride-group-middle",current&&i>0&&rows[i-1].classList.contains("ride-selected")&&i<rows.length-1&&rows[i+1].classList.contains("ride-selected"));
+  rows[i].classList.toggle("ride-group-end",current&&(i===rows.length-1||!rows[i+1].classList.contains("ride-selected")));
+ }for(const option of $("bulk-status").options)if(option.value==="delete")option.hidden=staffRole!=="admin";const pendingSelected=[...selectedTripIds].some(id=>visibleTripStatuses.get(id)==="pending")||[...document.querySelectorAll(".trip-select:checked")].some(input=>visibleTripStatuses.get(input.value)==="pending");const bulkDriver=$("bulk-driver");bulkDriver.disabled=selectedTripIds.size===0||pendingSelected;bulkDriver.title=pendingSelected?"One or more selected rides are Pending. Confirm all Pending rides first.":selectedTripIds.size===0?"Select rides first.":"";if(bulkDriver.disabled)bulkDriver.value="";for(const option of bulkDriver.options){if(option.value)option.disabled=bulkDriver.disabled}const count=selectedTripIds.size;$("bulk-count").textContent=count+" selected";$("bulk-apply").disabled=count===0;$("bulk-clear").disabled=count===0;const all=visibleTripIds.length>0&&visibleTripIds.every(id=>selectedTripIds.has(id));$("bulk-all").checked=all;$("bulk-all").indeterminate=!all&&visibleTripIds.some(id=>selectedTripIds.has(id))}
 // Explorer-style rubber-band selection, only from blank table-cell space.
 let rideDrag=null;
 const dragSurface=$("trips");
