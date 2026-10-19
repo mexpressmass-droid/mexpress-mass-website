@@ -69,6 +69,13 @@ async function employeeAdmin(request,env){
    if(!events.ok)return reply({error:"Activity log table is not configured yet"},503);
    return reply({events:await events.json()});
   }
+  if(body.action==="ride_history"){
+   if(typeof body.ride_id!=="string"||!/^[0-9a-f-]{36}$/i.test(body.ride_id))return reply({error:"Invalid ride"},400);
+   const params=new URLSearchParams({select:"id,created_at,actor_id,actor_role,action,details",target_id:"eq."+body.ride_id,order:"created_at.desc",limit:"100"});
+   const response=await fetch(SUPABASE+"/rest/v1/employee_audit_log?"+params.toString(),{headers:serviceHeaders});
+   if(!response.ok)return reply({error:"Ride history is not available. Check audit log setup."},503);
+   return reply({events:await response.json()});
+  }
   if(body.action==="record_activity"){
    const allowed=["view_ride","open_ride","view_messages","send_message","open_employee","login","logout","ride_status_click","ride_save_click","ride_bulk_click"];
    if(!allowed.includes(body.event))return reply({error:"Invalid activity"},400);
