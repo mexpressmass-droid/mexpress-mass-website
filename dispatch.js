@@ -442,7 +442,7 @@ const pu=new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_
  const closeTime=()=>{timeEdit.classList.add("hidden");timeEdit.remove();updateUnsavedIndicator()};
  let appliedPickupTime=puEdit.value,appliedDropoffTime=dropEdit.value,appliedPickupLabel=pickupLine.textContent,appliedDropoffLabel=dropoffLine.textContent;
  const cancelTime=()=>{puEdit.value=appliedPickupTime;dropEdit.value=appliedDropoffTime;pickupLine.textContent=appliedPickupLabel;dropoffLine.textContent=appliedDropoffLabel;timeCell.classList.toggle("time-draft",appliedPickupTime!==bostonTimeValue(trip.pickup_at)||appliedDropoffTime!==bostonTimeValue(trip.dropoff_at));row.classList.toggle("unsaved-row",!!row.querySelector(".unsaved-field,.time-draft"));closeTime()};
- const previewTime=()=>{const pickup=puEdit.value?puEdit.value:pu;const drop=dropEdit.value?dropEdit.value:"—";pickupLine.textContent="PU: "+pickup;dropoffLine.textContent="DropOff: "+drop;timeCell.classList.toggle("time-draft",puEdit.value!==bostonTimeValue(trip.pickup_at)||dropEdit.value!==bostonTimeValue(trip.dropoff_at));row.classList.toggle("unsaved-row",!!row.querySelector(".unsaved-field,.time-draft"));if(typeof undoRow!=="undefined")undoRow.disabled=!row.querySelector(".unsaved-field,.time-draft");updateUnsavedIndicator()};
+ const previewTime=()=>{const pickup=puEdit.value?puEdit.value:pu;const drop=dropEdit.value?dropEdit.value:"—";pickupLine.textContent="PU: "+pickup;dropoffLine.textContent="DropOff: "+drop;timeCell.classList.toggle("time-draft",puEdit.value!==bostonTimeValue(trip.pickup_at)||dropEdit.value!==bostonTimeValue(trip.dropoff_at));row.classList.toggle("unsaved-row",!!row.querySelector(".unsaved-field,.time-draft"));updateUnsavedIndicator()};
  const applyTime=()=>{if(!puEdit.value){msg("Pickup time is required.",true);return}if(!puEdit.validity.valid||(dropEdit.value&&!dropEdit.validity.valid)){msg("Enter a valid pickup and drop-off time.",true);return}if(dropEdit.value){const pickup=changedBostonTime(trip.pickup_at,puEdit.value);const dropoff=changedBostonTime(trip.dropoff_at||trip.pickup_at,dropEdit.value);if(Date.parse(dropoff)<Date.parse(pickup)){msg("Drop-off time cannot be earlier than pickup time on the same date.",true);return}}previewTime();appliedPickupTime=puEdit.value;appliedDropoffTime=dropEdit.value;appliedPickupLabel=pickupLine.textContent;appliedDropoffLabel=dropoffLine.textContent;closeTime()};
  timeCancel.addEventListener("click",cancelTime);timeApply.addEventListener("click",applyTime);
  for(const input of [puEdit,dropEdit])input.addEventListener("input",previewTime);
@@ -586,27 +586,8 @@ const save=el("button","Save");save.addEventListener("click",async()=>{
  }catch(e){console.warn("Could not load conflict details",e)}
  msg("Save blocked: "+err.message+details+" Your unsaved edits remain on screen. Copy them before refreshing.",true);row.classList.add("unsaved-row")}else msg(err.message,true)}finally{save.disabled=false}
 });
-const actionCell=el("div");actionCell.className="ride-row-actions";actionCell.append(save);
-const undoRow=el("button","Undo");undoRow.type="button";undoRow.title="Discard unsaved edits to this ride only";undoRow.className="ride-undo-button";undoRow.disabled=true;
-const restoreRowDraft=()=>{
- for(const field of row.querySelectorAll("input,textarea,select")){
-  if(["checkbox","button","hidden"].includes(field.type)||field.dataset.loadedValue===undefined)continue;
-  field.value=field.dataset.loadedValue;
-  field.classList.remove("unsaved-field");
- }
- puEdit.value=bostonTimeValue(trip.pickup_at);
- dropEdit.value=bostonTimeValue(trip.dropoff_at);
- appliedPickupTime=puEdit.value;appliedDropoffTime=dropEdit.value;
- pickupLine.textContent=appliedPickupLabel="PU: "+pu;
- dropoffLine.textContent=appliedDropoffLabel="DropOff: "+doTime;
- timeCell.classList.remove("time-draft");closeTime();
- row.classList.remove("unsaved-row");
- undoRow.disabled=true;
- updateUnsavedIndicator();
-};
-undoRow.addEventListener("click",()=>{if(confirm("Discard unsaved edits for this ride only?"))restoreRowDraft()});
-actionCell.append(undoRow);td(row,actionCell);
-for(const field of row.querySelectorAll("input,textarea,select")){if(field.type!=="checkbox"&&field.type!=="button"&&field.type!=="hidden"){field.dataset.loadedValue=field.value;const markDraft=()=>{const changed=field.value!==field.dataset.loadedValue;field.classList.toggle("unsaved-field",changed);row.classList.toggle("unsaved-row",!!row.querySelector(".unsaved-field,.time-draft"));undoRow.disabled=!row.querySelector(".unsaved-field,.time-draft");updateUnsavedIndicator()};field.addEventListener("input",markDraft);field.addEventListener("change",markDraft)}}body.append(row)}updateUnsavedIndicator();const scheduled=trips.filter(t=>t.assigned_driver_id).length;const pending=trips.filter(t=>t.status==="pending").length;$("schedule-summary").textContent=trips.length+" shown · "+scheduled+" assigned · "+(trips.length-scheduled)+" unassigned · "+pending+" pending";const completed=trips.filter(t=>t.status==="completed");const revenue=completed.reduce((sum,t)=>sum+(Number(t.price_cents)||0),0)/100;const activeDrivers=new Set(trips.filter(t=>t.assigned_driver_id).map(t=>t.assigned_driver_id)).size;$("driver-stats-summary").textContent=" · "+activeDrivers+" drivers · "+completed.length+" completed · $"+revenue.toFixed(2)+" completed value (shown rides)";updateSelection();if(!silent)msg(trips.length+" ride(s) in selected view.");}catch(err){if(!silent)msg(err.message,true);else console.warn("Silent dispatch refresh failed",err)}finally{refreshing=false}}
+td(row,save);
+for(const field of row.querySelectorAll("input,textarea,select")){if(field.type!=="checkbox"&&field.type!=="button"&&field.type!=="hidden"){field.dataset.loadedValue=field.value;const markDraft=()=>{const changed=field.value!==field.dataset.loadedValue;field.classList.toggle("unsaved-field",changed);row.classList.toggle("unsaved-row",!!row.querySelector(".unsaved-field,.time-draft"));updateUnsavedIndicator()};field.addEventListener("input",markDraft);field.addEventListener("change",markDraft)}}body.append(row)}updateUnsavedIndicator();const scheduled=trips.filter(t=>t.assigned_driver_id).length;const pending=trips.filter(t=>t.status==="pending").length;$("schedule-summary").textContent=trips.length+" shown · "+scheduled+" assigned · "+(trips.length-scheduled)+" unassigned · "+pending+" pending";const completed=trips.filter(t=>t.status==="completed");const revenue=completed.reduce((sum,t)=>sum+(Number(t.price_cents)||0),0)/100;const activeDrivers=new Set(trips.filter(t=>t.assigned_driver_id).map(t=>t.assigned_driver_id)).size;$("driver-stats-summary").textContent=" · "+activeDrivers+" drivers · "+completed.length+" completed · $"+revenue.toFixed(2)+" completed value (shown rides)";updateSelection();if(!silent)msg(trips.length+" ride(s) in selected view.");}catch(err){if(!silent)msg(err.message,true);else console.warn("Silent dispatch refresh failed",err)}finally{refreshing=false}}
 
 let currentChatId=null,chatPoll=null,chatRenderedId=null,chatLastMessageId=null,chatLoading=false,chatForceBottom=false,chatLatestTimestamp=null,chatOtherReadAt=null;
 const CHAT_BOTTOM_THRESHOLD=75;
