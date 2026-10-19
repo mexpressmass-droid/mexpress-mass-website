@@ -872,7 +872,30 @@ $("employee-password-form").addEventListener("submit",async e=>{
 });
 // Refresh the dispatcher view periodically without interrupting edits or selections.
 let dispatchAutoRefreshBusy=false;
-function updateUnsavedIndicator(){const indicator=$("unsaved-indicator");if(indicator)indicator.classList.toggle("hidden",!dispatchHasPendingChanges())}
+function updateUnsavedIndicator(){const indicator=$("unsaved-indicator"),pending=dispatchHasPendingChanges();if(indicator)indicator.classList.toggle("hidden",!pending);const undo=$("undo-ride-edits");if(undo)undo.disabled=!pending}
+$("undo-ride-edits").addEventListener("click",()=>{
+ if(!dispatchHasPendingChanges()||!confirm("Discard all unsaved ride edits currently visible?"))return;
+ for(const field of $("trips").querySelectorAll("input,textarea,select")){
+  if(["checkbox","button","hidden"].includes(field.type)||field.dataset.loadedValue===undefined)continue;
+  field.value=field.dataset.loadedValue;
+  field.dispatchEvent(new Event("change",{bubbles:true}));
+ }
+ // Time drafts use a separate editor; refresh only after restoring regular inputs.
+ load();
+});
+function refreshConnectionNotice(){
+ const indicator=$("connection-indicator");
+ if(indicator)indicator.classList.toggle("hidden",navigator.onLine!==false);
+ if(staffRole==="driver"&&navigator.onLine===false)$("my-rides-notice").textContent="Offline — rides may be outdated. Reconnect to refresh.";
+}
+window.addEventListener("offline",refreshConnectionNotice);
+window.addEventListener("online",()=>{
+ refreshConnectionNotice();
+ if(!token||document.hidden)return;
+ if(staffRole==="driver"&&!rideRefreshBusy&&!driverStatusSaving)loadMyRides({silent:true});
+ else if(["admin","dispatcher"].includes(staffRole)&&!refreshing&&!dispatchHasUnsavedEdits())load({silent:true});
+});
+refreshConnectionNotice();
 function dispatchHasPendingChanges(){
  const panel=$("dispatch-panel");
  if(!panel||panel.classList.contains("hidden"))return false;
