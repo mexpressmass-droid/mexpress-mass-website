@@ -119,6 +119,7 @@ async function employeeAdmin(request,env){
    const existing=await existingResponse.json();
    if(existing.length!==body.ride_ids.length||existing.some(t=>t.archived_at!==null))return reply({error:"One or more rides are missing or archived. Refresh and retry."},409);
    if(existing.some(t=>t.status==="pending"))return reply({error:"Pending rides must be confirmed before assigning a driver. No rides were changed."},409);
+   if(existing.some(t=>["completed","cancelled"].includes(t.status)))return reply({error:"Completed or Cancelled rides cannot be reassigned. No rides were changed."},409);
    const now=new Date().toISOString();
    let updatedCount=0;
    for(const group of [existing.filter(t=>["confirmed","assigned"].includes(t.status)),existing.filter(t=>!["confirmed","assigned"].includes(t.status))]){
@@ -126,9 +127,10 @@ async function employeeAdmin(request,env){
     const patch={assigned_driver_id:driverId,updated_at:now};
     if(["pending","confirmed","assigned"].includes(group[0].status))patch.status="assigned";
     const response=await fetch(SUPABASE+"/rest/v1/trips?id=in.("+group.map(t=>t.id).join(",")+")&archived_at=is.null",{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(patch)});
-    if(!response.ok){console.error("Bulk assign failed",response.status,await response.text());return reply({error:"Unable to assign all selected rides. Refresh to review."},502)}
+    if(!response.ok){console.error("Bulk assign failed",response.status,await response.text());return reply({error:"Bulk assignment stopped after "+updatedCount+" of "+body.ride_ids.length+" rides. Refresh to review.",count:updatedCount,requested:body.ride_ids.length},502)}
     updatedCount+=(await response.json()).length;
    }
+   if(updatedCount!==body.ride_ids.length)return reply({error:"Only "+updatedCount+" of "+body.ride_ids.length+" rides were assigned. Refresh and review.",count:updatedCount,requested:body.ride_ids.length},409);
    await logEmployeeEvent(env,user,staffRole,"bulk_assign_driver",user.id,{count:updatedCount,driver_id:driverId,ride_ids:body.ride_ids});
    return reply({success:true,count:updatedCount,requested:body.ride_ids.length});
   }
