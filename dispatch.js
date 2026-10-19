@@ -299,7 +299,7 @@ async function loadMyRides({silent=false}={}){
       const steps=["assigned","on_the_way","arrived","boarded","completed"],i=steps.indexOf(trip.status);
       if(i>=0&&i<steps.length-1){
         const next=steps[i+1],button=el("button","Mark "+next.replaceAll("_"," "));
-        button.addEventListener("click",async()=>{if(driverStatusSaving)return;driverStatusSaving=true;button.disabled=true;try{await api("/rest/v1/rpc/driver_update_trip_status",{method:"POST",body:JSON.stringify({p_trip_id:trip.id,p_new_status:next})});while(rideRefreshBusy)await new Promise(resolve=>setTimeout(resolve,75));await loadMyRides()}catch(e){note.textContent=e.message;button.disabled=false}finally{driverStatusSaving=false}});
+        button.addEventListener("click",async()=>{if(driverStatusSaving)return;driverStatusSaving=true;button.disabled=true;let saved=false;try{await api("/rest/v1/rpc/driver_update_trip_status",{method:"POST",body:JSON.stringify({p_trip_id:trip.id,p_new_status:next})});saved=true;while(rideRefreshBusy)await new Promise(resolve=>setTimeout(resolve,75));await loadMyRides()}catch(e){note.textContent=saved?"Status saved, but the ride list could not refresh. Please refresh before changing status again.":e.message;if(!saved)button.disabled=false}finally{driverStatusSaving=false}});
         card.append(button);
       }
       list.append(card);
