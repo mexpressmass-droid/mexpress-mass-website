@@ -165,11 +165,12 @@ async function employeeAdmin(request,env){
    const field=body.field;
    if(!["pickup_address","dropoff_address"].includes(field))return reply({error:"Invalid address field"},400);
    if(typeof body.value!=="string"||!body.value.trim()||body.value.length>500)return reply({error:"Valid address required (max 500 characters)"},400);
-   const oldResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,updated_at,"+field+"&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
+   const oldResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,updated_at,archived_at,"+field+"&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
    if(!oldResponse.ok)return reply({error:"Unable to load ride address"},502);
    const old=(await oldResponse.json())[0];if(!old)return reply({error:"Ride not found"},404);
+   if(old.archived_at!==null)return reply({error:"This ride is archived. Restore it before editing."},409);
    const value=body.value.trim();if(old[field]===value)return reply({success:true,unchanged:true});
-   const patch=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id)+"&updated_at=eq."+encodeURIComponent(old.updated_at),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({[field]:value,updated_at:new Date().toISOString()})});
+   const patch=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id)+"&updated_at=eq."+encodeURIComponent(old.updated_at)+"&archived_at=is.null",{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({[field]:value,updated_at:new Date().toISOString()})});
    if(!patch.ok)return reply({error:"Unable to save ride address"},502);
    const saved=await patch.json();
    if(saved.length!==1)return reply({error:"This ride changed while you were editing. Refresh and retry; no changes were saved."},409);
@@ -181,12 +182,13 @@ async function employeeAdmin(request,env){
    const field=body.field;
    if(!["passenger_name","passenger_phone","passenger_email"].includes(field))return reply({error:"Invalid contact field"},400);
    if(typeof body.value!=="string"||body.value.length>250||(field==="passenger_name"&&!body.value.trim()))return reply({error:"Invalid contact value"},400);
-   const oldResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,updated_at,"+field+"&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
+   const oldResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,updated_at,archived_at,"+field+"&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
    if(!oldResponse.ok)return reply({error:"Unable to load contact"},502);
    const old=(await oldResponse.json())[0];if(!old)return reply({error:"Ride not found"},404);
+   if(old.archived_at!==null)return reply({error:"This ride is archived. Restore it before editing."},409);
    const value=body.value.trim()||null;
    if((old[field]??null)===value)return reply({success:true,unchanged:true});
-   const patch=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id)+"&updated_at=eq."+encodeURIComponent(old.updated_at),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({[field]:value,updated_at:new Date().toISOString()})});
+   const patch=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id)+"&updated_at=eq."+encodeURIComponent(old.updated_at)+"&archived_at=is.null",{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({[field]:value,updated_at:new Date().toISOString()})});
    if(!patch.ok)return reply({error:"Unable to save contact"},502);
    const saved=await patch.json();
    if(saved.length!==1)return reply({error:"This ride changed while you were editing. Refresh and retry; no changes were saved."},409);
@@ -195,10 +197,11 @@ async function employeeAdmin(request,env){
   }
   if(body.action==="update_ride"){
    if(typeof body.ride_id!=="string"||!/^[0-9a-f-]{36}$/i.test(body.ride_id))return reply({error:"Invalid ride"},400);
-   const currentResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,status,assigned_driver_id,pickup_at,dropoff_at,pickup_address,dropoff_address,price_cents,internal_notes,notes,updated_at&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
+   const currentResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,archived_at,status,assigned_driver_id,pickup_at,dropoff_at,pickup_address,dropoff_address,price_cents,internal_notes,notes,updated_at&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
    if(!currentResponse.ok)return reply({error:"Unable to load ride"},502);
    const current=(await currentResponse.json())[0];
    if(!current)return reply({error:"Ride not found"},404);
+   if(current.archived_at!==null)return reply({error:"This ride is archived. Restore it before editing."},409);
    if(typeof body.expected_updated_at!=="string"||!Number.isFinite(Date.parse(body.expected_updated_at)))return reply({error:"Refresh the ride before saving: version information is missing."},409);
    if(new Date(body.expected_updated_at).getTime()!==new Date(current.updated_at).getTime())return reply({error:"This ride was changed by another user. Refresh before saving to avoid overwriting their changes."},409);
    if(!["pending","confirmed","assigned","on_the_way","arrived","boarded","completed","cancelled"].includes(body.status))return reply({error:"Invalid status"},400);
@@ -224,7 +227,7 @@ async function employeeAdmin(request,env){
    if(driverId===null&&["on_the_way","arrived","boarded"].includes(body.status))return reply({error:"Assign a driver before setting this ride in progress."},409);
    const nextStatus=driverId!==null&&["confirmed","assigned"].includes(body.status)?"assigned":body.status;
    const changes={status:nextStatus,pickup_at:pickupTime,dropoff_at:dropoffTime,pickup_address:body.pickup_address.trim(),dropoff_address:body.dropoff_address.trim(),price_cents:body.price_cents,assigned_driver_id:driverId,notes:body.notes,internal_notes:body.internal_notes,updated_at:new Date().toISOString()};
-   const saved=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id)+"&updated_at=eq."+encodeURIComponent(current.updated_at),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(changes)});
+   const saved=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id)+"&updated_at=eq."+encodeURIComponent(current.updated_at)+"&archived_at=is.null",{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(changes)});
    if(!saved.ok)return reply({error:"Unable to save ride changes"},502);
    const savedRows=await saved.json();
    if(savedRows.length!==1)return reply({error:"Ride changed during saving. Refresh and review before trying again."},409);
