@@ -158,12 +158,14 @@ async function employeeAdmin(request,env){
    const field=body.field;
    if(!["pickup_address","dropoff_address"].includes(field))return reply({error:"Invalid address field"},400);
    if(typeof body.value!=="string"||!body.value.trim()||body.value.length>500)return reply({error:"Valid address required (max 500 characters)"},400);
-   const oldResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,"+field+"&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
+   const oldResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,updated_at,"+field+"&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
    if(!oldResponse.ok)return reply({error:"Unable to load ride address"},502);
    const old=(await oldResponse.json())[0];if(!old)return reply({error:"Ride not found"},404);
    const value=body.value.trim();if(old[field]===value)return reply({success:true,unchanged:true});
-   const patch=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({[field]:value,updated_at:new Date().toISOString()})});
+   const patch=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id)+"&updated_at=eq."+encodeURIComponent(old.updated_at),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({[field]:value,updated_at:new Date().toISOString()})});
    if(!patch.ok)return reply({error:"Unable to save ride address"},502);
+   const saved=await patch.json();
+   if(saved.length!==1)return reply({error:"This ride changed while you were editing. Refresh and retry; no changes were saved."},409);
    await logEmployeeEvent(env,user,staffRole,"update_ride_address",body.ride_id,{ride_id:body.ride_id,changes:{[field]:{before:old[field]??null,after:value}}});
    return reply({success:true});
   }
@@ -172,13 +174,15 @@ async function employeeAdmin(request,env){
    const field=body.field;
    if(!["passenger_name","passenger_phone","passenger_email"].includes(field))return reply({error:"Invalid contact field"},400);
    if(typeof body.value!=="string"||body.value.length>250||(field==="passenger_name"&&!body.value.trim()))return reply({error:"Invalid contact value"},400);
-   const oldResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,"+field+"&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
+   const oldResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,updated_at,"+field+"&id=eq."+encodeURIComponent(body.ride_id)+"&limit=1",{headers:serviceHeaders});
    if(!oldResponse.ok)return reply({error:"Unable to load contact"},502);
    const old=(await oldResponse.json())[0];if(!old)return reply({error:"Ride not found"},404);
    const value=body.value.trim()||null;
    if((old[field]??null)===value)return reply({success:true,unchanged:true});
-   const patch=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({[field]:value,updated_at:new Date().toISOString()})});
+   const patch=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id)+"&updated_at=eq."+encodeURIComponent(old.updated_at),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify({[field]:value,updated_at:new Date().toISOString()})});
    if(!patch.ok)return reply({error:"Unable to save contact"},502);
+   const saved=await patch.json();
+   if(saved.length!==1)return reply({error:"This ride changed while you were editing. Refresh and retry; no changes were saved."},409);
    await logEmployeeEvent(env,user,staffRole,"update_ride_contact",body.ride_id,{ride_id:body.ride_id,changes:{[field]:{before:old[field]??null,after:value}}});
    return reply({success:true});
   }
