@@ -386,9 +386,10 @@ const pu=new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_
  const timeCancel=el("button","Cancel");timeCancel.type="button";
  const timeApply=el("button","Save");timeApply.type="button";
  const closeTime=()=>{timeEdit.classList.add("hidden");timeEdit.remove()};
- const cancelTime=()=>{puEdit.value=bostonTimeValue(trip.pickup_at);dropEdit.value=bostonTimeValue(trip.dropoff_at);closeTime()};
+ let appliedPickupTime=puEdit.value,appliedDropoffTime=dropEdit.value,appliedPickupLabel=pickupLine.textContent,appliedDropoffLabel=dropoffLine.textContent;
+ const cancelTime=()=>{puEdit.value=appliedPickupTime;dropEdit.value=appliedDropoffTime;pickupLine.textContent=appliedPickupLabel;dropoffLine.textContent=appliedDropoffLabel;timeCell.classList.toggle("time-draft",appliedPickupTime!==bostonTimeValue(trip.pickup_at)||appliedDropoffTime!==bostonTimeValue(trip.dropoff_at));closeTime()};
  const previewTime=()=>{const pickup=puEdit.value?puEdit.value:pu;const drop=dropEdit.value?dropEdit.value:"—";pickupLine.textContent="PU: "+pickup;dropoffLine.textContent="DropOff: "+drop;timeCell.classList.add("time-draft")};
- const applyTime=()=>{if(!puEdit.value){msg("Pickup time is required.",true);return}previewTime();closeTime()};
+ const applyTime=()=>{if(!puEdit.value){msg("Pickup time is required.",true);return}previewTime();appliedPickupTime=puEdit.value;appliedDropoffTime=dropEdit.value;appliedPickupLabel=pickupLine.textContent;appliedDropoffLabel=dropoffLine.textContent;closeTime()};
  timeCancel.addEventListener("click",cancelTime);timeApply.addEventListener("click",applyTime);
  for(const input of [puEdit,dropEdit])input.addEventListener("input",previewTime);
  timeEdit.addEventListener("keydown",event=>{if(event.key==="Escape"){event.preventDefault();cancelTime()}});
