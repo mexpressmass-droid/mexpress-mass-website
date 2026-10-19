@@ -840,4 +840,20 @@ $("employee-password-form").addEventListener("submit",async e=>{
   employeeNotice("Password updated. Share the new password privately with the employee.");
  }catch(err){employeeNotice(err.message,true)}finally{$("employee-save-password").disabled=false}
 });
+// Refresh the dispatcher view periodically without interrupting edits or selections.
+let dispatchAutoRefreshBusy=false;
+function dispatchHasUnsavedEdits(){
+ const panel=$("dispatch-panel");
+ if(!panel||panel.classList.contains("hidden"))return true;
+ const focused=document.activeElement;
+ if(focused&&panel.contains(focused)&&focused.matches("input,textarea,select,[contenteditable]"))return true;
+ if(panel.querySelector(".cell-editor-overlay:not(.hidden),.time-editor:not(.hidden)"))return true;
+ return selectedTripIds.size>0;
+}
+setInterval(async()=>{
+ if(!token||!["admin","dispatcher"].includes(staffRole)||document.hidden||refreshing||dispatchAutoRefreshBusy||dispatchHasUnsavedEdits())return;
+ dispatchAutoRefreshBusy=true;
+ try{await load()}catch(error){console.warn("Dispatch auto-refresh failed",error)}
+ finally{dispatchAutoRefreshBusy=false}
+},15000);
 restoreSession();
