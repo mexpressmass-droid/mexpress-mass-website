@@ -214,6 +214,37 @@ async function employeeAdmin(request,env){
 
    return reply({success:true});
   }
+  if(body.action==="seed_demo_100_rides"){
+   if(staffRole!=="admin")return reply({error:"Administrator access required"},403);
+   const names=["Olivia","James","Sophia","Daniel","Emma","Noah","Ava","Liam","Mia","Ethan","Charlotte","Lucas","Amelia","Henry","Harper","Benjamin","Isabella","Alexander","Evelyn","William","Grace","Jack","Chloe","Oliver","Ella","Mason","Lily","Logan","Zoe","Samuel"];
+   const surnames=["Parker","Wilson","Bennett","Foster","Mitchell","Turner","Collins","Brooks","Peterson","Reed","Hayes","Morgan","Cooper","Sullivan","Jenkins","Price","Ross","Gray","Murphy","Carter"];
+   const places=["Burlington, MA","Woburn, MA","Lexington, MA","Waltham, MA","Newton, MA","Cambridge, MA","Medford, MA","Arlington, MA","Brookline, MA","Boston, MA","Somerville, MA","Watertown, MA","Belmont, MA","Needham, MA","Winchester, MA"];
+   const instructions=["Pickup at main lobby","Door-to-door assistance requested","Call passenger on arrival","Escort accompanying passenger","Wheelchair accessible vehicle required","Pickup at front desk","Passenger uses a walker"];
+   const batchTag="MEXPRESS_DEMO_100_"+Date.now();
+   const today=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+   const base=new Date(today+"T12:00:00Z");
+   const randomInt=n=>Math.floor(Math.random()*n);
+   function bostonTime(day,hour,minute){
+    const d=new Date(base);d.setUTCDate(d.getUTCDate()+day);
+    const date=d.toISOString().slice(0,10);
+    const guess=new Date(date+"T"+String(hour).padStart(2,"0")+":"+String(minute).padStart(2,"0")+":00Z");
+    const zone=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",timeZoneName:"shortOffset"}).formatToParts(guess).find(p=>p.type==="timeZoneName")?.value||"GMT-4";
+    const match=zone.match(/GMT([+-])(\\d{1,2})(?::(\\d{2}))?/);
+    const offset=match?(match[1]==="-"?-1:1)*(Number(match[2])*60+Number(match[3]||0)):-240;
+    return new Date(guess.getTime()-offset*60000).toISOString();
+   }
+   const records=Array.from({length:100},(_,i)=>{
+    const origin=randomInt(places.length);let destination=randomInt(places.length);if(destination===origin)destination=(origin+1)%places.length;
+    const day=randomInt(30),hour=7+randomInt(12),minute=[0,15,30,45][randomInt(4)];
+    const wheelchair=randomInt(3)===0;
+    return {passenger_name:"TEST — "+names[randomInt(names.length)]+" "+surnames[randomInt(surnames.length)],passenger_phone:"202-555-"+String(1000+i).padStart(4,"0"),pickup_address:"TEST ONLY — "+places[origin],dropoff_address:"TEST ONLY — "+places[destination],pickup_at:bostonTime(day,hour,minute),wheelchair_required:wheelchair,trip_type:"one_way",status:"pending",source:"dispatch",assigned_driver_id:null,price_cents:9288+randomInt(10)*750,notes:batchTag+" | "+instructions[randomInt(instructions.length)]+" | TEST DATA, NOT A REAL BOOKING"};
+   });
+   const inserted=await fetch(SUPABASE+"/rest/v1/trips",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(records)});
+   if(!inserted.ok){const details=await inserted.text();console.error("100 demo seed failed",inserted.status,details);return reply({error:"Unable to create 100 demo rides: "+details.slice(0,200)},502)}
+   const created=await inserted.json();
+   await logEmployeeEvent(env,user,staffRole,"seed_demo_100_rides",user.id,{count:created.length,tag:batchTag});
+   return reply({success:true,count:created.length});
+  }
   if(body.action==="seed_demo_50_rides"){
    if(staffRole!=="admin")return reply({error:"Administrator access required"},403);
    const tag="MEXPRESS_DEMO_50_OCT2026";
