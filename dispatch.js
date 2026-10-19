@@ -559,24 +559,6 @@ const status=select([...new Set([trip.status,...statuses])].map(v=>[v,v.replaceA
 const price=el("input");price.type="number";price.min="0";price.step="0.01";price.value=trip.price_cents==null?"":(trip.price_cents/100).toFixed(2);price.placeholder="Not set";doubleClickField(price);td(row,price);
 const archivedAssigned=allDriverProfiles.find(d=>d.id===trip.assigned_driver_id&&d.is_active===false);const driverOptions=[["","Unassigned"],...drivers.filter(d=>d.role==="driver").map(d=>[d.id,d.display_name+" ("+d.username+")"])];if(archivedAssigned&&staffRole==="admin")driverOptions.push([archivedAssigned.id,archivedAssigned.display_name+" (archived — historical assignment)"]);const driver=select(driverOptions,trip.assigned_driver_id||"");if(trip.status==="pending"){driver.disabled=true;driver.title="Confirm and save this ride before assigning a driver."}driver.dataset.rideDriver="true";driver.addEventListener("change",()=>{if(driver.value&&["confirmed","assigned"].includes(status.value)){status.value="assigned"}else if(!driver.value&&status.value==="assigned"){status.value="confirmed"}row.classList.remove("ride-pending","ride-confirmed","ride-assigned","ride-completed","ride-cancelled");row.classList.add(tripColor(status.value));if(selectedTripIds.has(trip.id)&&selectedTripIds.size>=1&&driver.value){$("bulk-driver").value=driver.value;previewSelectedChanges("driver",driver.value)}});if(archivedAssigned&&staffRole==="admin"){const opt=Array.from(driver.options).find(o=>o.value===archivedAssigned.id);if(opt)opt.disabled=true}td(row,driver);
 const driverComment=el("textarea");driverComment.rows=2;driverComment.maxLength=4000;driverComment.className="driver-comment-edit";driverComment.title=trip.notes||"Driver comments — visible to assigned driver";driverComment.placeholder="Notes for driver";driverComment.value=[trip.wheelchair_required&&!/\bwheelchair\b/i.test(trip.notes||"")?"Wheelchair required":null,trip.notes||null].filter(Boolean).join(" | ");expandOnClick(driverComment,"Driver Comments");td(row,driverComment);const internal=el("textarea");internal.rows=2;internal.maxLength=4000;internal.title=trip.internal_notes||"Internal comments";internal.placeholder="Staff only — not visible to driver";internal.value=trip.internal_notes||"";internal.addEventListener("input",()=>{row.classList.toggle("has-internal-comments",!!internal.value.trim());row.classList.toggle("cancelled-no-internal-comments",!internal.value.trim()&&trip.status==="cancelled")});expandOnClick(internal,"Internal Comments");td(row,internal);
-const history=el("button","History");
-history.type="button";history.title="Show saved change history for this ride";
-history.addEventListener("click",async()=>{
- history.disabled=true;
- try{
-  const result=await employeeAdminRequest({action:"ride_history",ride_id:trip.id});
-  const events=result.events||[];
-  if(!events.length){alert("No recorded changes found for this ride.");return}
-  const lines=events.map(e=>{
-   const changes=e.details?.changes||{};
-   const summary=Object.entries(changes).map(([key,value])=>key+": "+String(value?.before??"—")+" → "+String(value?.after??"—")).join("; ");
-   return new Date(e.created_at).toLocaleString("en-US",{timeZone:"America/New_York"})+" · "+(e.actor_role||"staff")+" · "+e.action+(summary?"\n"+summary:"");
-  });
-  alert("Ride history · "+trip.passenger_name+"\n\n"+lines.join("\n\n"));
- }catch(err){msg("Unable to load ride history: "+err.message,true)}
- finally{history.disabled=false}
-});
-td(row,history);
 const save=el("button","Save");save.addEventListener("click",async()=>{
  const selectedAction=status.value;
  // Row Save always affects this ride only, regardless of bulk selection.
