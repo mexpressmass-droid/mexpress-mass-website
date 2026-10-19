@@ -449,7 +449,7 @@ if(trip.passenger_email)cell.append(contactAction("passenger_email","Email",trip
 td(row,cell);let route=el("div");
 function bostonTimeValue(value){return value?new Date(value).toLocaleTimeString("en-GB",{timeZone:"America/New_York",hour:"2-digit",minute:"2-digit",hour12:false}):""}
 function changedBostonTime(original,time){
- if(!time||!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(time))throw Error("Enter a valid time");
+ if(!time||!/^([01]\d|2[0-3]):[0-5]\d$/.test(time))throw Error("Enter a valid time");
  const day=bostonDate(original);const desired=day+"T"+time+":00";
  let guess=Date.parse(desired+"Z");
  for(let i=0;i<3;i++){
