@@ -270,6 +270,7 @@ function updateRideNotifications(trips){
 }
 
 let driverStatusSaving=false;
+let driverRefreshFailures=0;
 async function loadMyRides({silent=false}={}){
   if(rideRefreshBusy||driverStatusSaving&&silent)return;rideRefreshBusy=true;
   const note=$("my-rides-notice"),list=$("my-rides-list");
@@ -303,8 +304,9 @@ async function loadMyRides({silent=false}={}){
       }
       list.append(card);
     }
+    driverRefreshFailures=0;
     note.textContent=mine.length+(myRidesTab==="history"?" ride(s) in history.":" active ride(s) assigned to you.");
-  }catch(e){if(!silent)note.textContent=e.message;else console.warn("Driver ride refresh failed",e)}finally{rideRefreshBusy=false}
+  }catch(e){driverRefreshFailures++;if(!silent)note.textContent=e.message;else if(driverRefreshFailures>=3)note.textContent="Connection issue: rides may be outdated. Retrying automatically.";else console.warn("Driver ride refresh failed",e)}finally{rideRefreshBusy=false}
 }
 setInterval(()=>{if(token&&staffRole==="driver"&&!document.hidden&&!rideRefreshBusy&&!driverStatusSaving)loadMyRides({silent:true})},8000);
 
