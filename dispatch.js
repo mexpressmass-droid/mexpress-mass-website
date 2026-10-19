@@ -280,7 +280,7 @@ async function loadMyRides({silent=false}={}){
   const refreshUser=userId;
   if(!silent)note.textContent="Loading...";
   try{
-    const trips=staffRole==="driver"?await api("/rest/v1/trips?select=id,passenger_name,passenger_phone,pickup_at,pickup_address,dropoff_address,dropoff_at,status,notes,assigned_driver_id&assigned_driver_id=eq."+encodeURIComponent(refreshUser)+"&order=pickup_at.asc"):await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"});
+    const trips=staffRole==="driver"?await api("/rest/v1/trips?select=id,passenger_name,passenger_phone,pickup_at,pickup_address,dropoff_address,dropoff_at,status,notes,assigned_driver_id&assigned_driver_id=eq."+encodeURIComponent(refreshUser)+"&archived_at=is.null&order=pickup_at.asc"):await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"});
     const mine=trips.filter(t=>t.assigned_driver_id===refreshUser&&(["completed","cancelled"].includes(t.status)===(refreshTab==="history"))).sort((a,b)=>refreshTab==="history"?new Date(b.pickup_at)-new Date(a.pickup_at):new Date(a.pickup_at)-new Date(b.pickup_at));
     if(refreshTab!==myRidesTab||refreshUser!==userId)return;
     updateRideNotifications(trips);
