@@ -311,6 +311,8 @@ async function loadMyRides({silent=false}={}){
   }catch(e){driverRefreshFailures++;if(!silent)note.textContent=e.message;else if(driverRefreshFailures>=3)note.textContent="Connection issue: rides may be outdated. Retrying automatically.";else console.warn("Driver ride refresh failed",e)}finally{rideRefreshBusy=false}
 }
 setInterval(()=>{if(token&&staffRole==="driver"&&!document.hidden&&!rideRefreshBusy&&!driverStatusSaving)loadMyRides({silent:true})},8000);
+// Refresh immediately when a driver returns to the app instead of waiting for the next interval.
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&token&&staffRole==="driver"&&!rideRefreshBusy&&!driverStatusSaving)loadMyRides({silent:true})});
 
 $("seed-demo-100-rides").addEventListener("click",async()=>{
  if(!confirm("Create 100 randomly generated TEST rides over the next 30 days? No real customers or drivers will be assigned."))return;
@@ -881,4 +883,6 @@ setInterval(async()=>{
  try{await load({silent:true})}catch(error){console.warn("Dispatch auto-refresh failed",error)}
  finally{dispatchAutoRefreshBusy=false}
 },15000);
+// Refresh the dispatch board on return from another tab, while preserving unsaved edits.
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&token&&["admin","dispatcher"].includes(staffRole)&&!refreshing&&!dispatchAutoRefreshBusy&&!dispatchHasUnsavedEdits())load({silent:true})});
 restoreSession();
