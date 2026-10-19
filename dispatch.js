@@ -894,17 +894,7 @@ $("employee-password-form").addEventListener("submit",async e=>{
 });
 // Refresh the dispatcher view periodically without interrupting edits or selections.
 let dispatchAutoRefreshBusy=false;
-function updateUnsavedIndicator(){const indicator=$("unsaved-indicator"),pending=dispatchHasPendingChanges();if(indicator)indicator.classList.toggle("hidden",!pending);const undo=$("undo-ride-edits");if(undo)undo.disabled=!pending}
-$("undo-ride-edits").addEventListener("click",()=>{
- if(!dispatchHasPendingChanges()||!confirm("Discard all unsaved ride edits currently visible?"))return;
- for(const field of $("trips").querySelectorAll("input,textarea,select")){
-  if(["checkbox","button","hidden"].includes(field.type)||field.dataset.loadedValue===undefined)continue;
-  field.value=field.dataset.loadedValue;
-  field.dispatchEvent(new Event("change",{bubbles:true}));
- }
- // Time drafts use a separate editor; refresh only after restoring regular inputs.
- load();
-});
+function updateUnsavedIndicator(){const indicator=$("unsaved-indicator"),pending=dispatchHasPendingChanges();if(indicator)indicator.classList.toggle("hidden",!pending);}
 function refreshConnectionNotice(){
  const indicator=$("connection-indicator");
  if(indicator)indicator.classList.toggle("hidden",navigator.onLine!==false);
