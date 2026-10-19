@@ -521,7 +521,7 @@ const save=el("button","Save");save.addEventListener("click",async()=>{
  if(!confirm("Confirm changes to this ride?"))return;
  save.disabled=true;try{const cents=price.value.trim()===""?null:Math.round(Number(price.value)*100);if(cents!==null&&(!Number.isSafeInteger(cents)||cents<0))throw Error("Invalid price");await employeeAdminRequest({action:"update_ride",ride_id:trip.id,status:status.value,price_cents:cents,assigned_driver_id:driver.value||null,pickup_at:timeLocked?trip.pickup_at:changedBostonTime(trip.pickup_at,puEdit.value),dropoff_at:timeLocked?trip.dropoff_at:(dropEdit.value?(trip.dropoff_at?changedBostonTime(trip.dropoff_at,dropEdit.value):changedBostonTime(trip.pickup_at,dropEdit.value)):null),pickup_address:pickupInput.value,dropoff_address:dropoffInput.value,notes:driverComment.value.trim()||null,internal_notes:internal.value.trim()||null});await load();msg("Ride updated.")}catch(err){msg(err.message,true)}finally{save.disabled=false}
 });td(row,save);
-body.append(row)}const scheduled=trips.filter(t=>t.assigned_driver_id).length;const pending=trips.filter(t=>t.status==="pending").length;$("schedule-summary").textContent=trips.length+" shown · "+scheduled+" assigned · "+(trips.length-scheduled)+" unassigned · "+pending+" pending";updateSelection();msg(trips.length+" ride(s) in selected view.");}catch(err){msg(err.message,true)}finally{refreshing=false}}
+for(const field of row.querySelectorAll("input,textarea,select")){if(field.type!=="checkbox"&&field.type!=="button"&&field.type!=="hidden")field.dataset.loadedValue=field.value;}body.append(row)}const scheduled=trips.filter(t=>t.assigned_driver_id).length;const pending=trips.filter(t=>t.status==="pending").length;$("schedule-summary").textContent=trips.length+" shown · "+scheduled+" assigned · "+(trips.length-scheduled)+" unassigned · "+pending+" pending";updateSelection();msg(trips.length+" ride(s) in selected view.");}catch(err){msg(err.message,true)}finally{refreshing=false}}
 
 let currentChatId=null,chatPoll=null,chatRenderedId=null,chatLastMessageId=null,chatLoading=false,chatForceBottom=false,chatLatestTimestamp=null,chatOtherReadAt=null;
 const CHAT_BOTTOM_THRESHOLD=75;
@@ -854,6 +854,14 @@ function dispatchHasUnsavedEdits(){
  const focused=document.activeElement;
  if(focused&&panel.contains(focused)&&focused.matches("input,textarea,select,[contenteditable]"))return true;
  if(panel.querySelector(".cell-editor-overlay:not(.hidden),.time-editor:not(.hidden)"))return true;
+ // Do not discard any unsaved row edits while auto-refreshing.
+ for(const row of $("trips").querySelectorAll("tr")){
+  for(const field of row.querySelectorAll("input,textarea,select")){
+   if(field.type==="checkbox"||field.type==="button"||field.type==="hidden")continue;
+   if(field.tagName==="SELECT"){if(field.value!==field.dataset.loadedValue)return true;}
+   else if(field.value!==field.dataset.loadedValue)return true;
+  }
+ }
  return selectedTripIds.size>0;
 }
 setInterval(async()=>{
