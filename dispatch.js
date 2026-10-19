@@ -59,7 +59,7 @@ for(const id of ["dispatch-range","dispatch-date"])$(id).addEventListener("chang
 for(const [id,tab] of [["my-active","active"],["my-history","history"]])$(id).addEventListener("click",()=>{myRidesTab=tab;$("my-active").classList.toggle("active",tab==="active");$("my-history").classList.toggle("active",tab==="history");loadMyRides();saveView()});
 function bostonDate(value){return new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value))}
 function addDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)}
-function visibleTrip(t){const driver=$("schedule-driver")?.value||"";if(driver&&((driver==="unassigned"&&t.assigned_driver_id)||(driver!=="unassigned"&&t.assigned_driver_id!==driver)))return false;const range=$("dispatch-range").value,day=$("dispatch-date").value,date=bostonDate(t.pickup_at);return range==="all"||!day||(range==="day"?date===day:date>=day&&date<addDays(day,7))}
+function visibleTrip(t){const query=($("dispatch-search")?.value||"").trim().toLocaleLowerCase();if(query){const fields=[t.id,t.passenger_name,t.passenger_phone,t.passenger_email,t.pickup_address,t.dropoff_address].map(value=>String(value??"").toLocaleLowerCase());const digits=query.replace(/\D/g,"");if(!fields.some(value=>value.includes(query))&&!(digits.length>=3&&String(t.passenger_phone||"").replace(/\D/g,"").includes(digits)))return false;}const driver=$("schedule-driver")?.value||"";if(driver&&((driver==="unassigned"&&t.assigned_driver_id)||(driver!=="unassigned"&&t.assigned_driver_id!==driver)))return false;const range=$("dispatch-range").value,day=$("dispatch-date").value,date=bostonDate(t.pickup_at);return range==="all"||!day||(range==="day"?date===day:date>=day&&date<addDays(day,7))}
 function compareDispatchRides(a,b){
  const mode=$("dispatch-sort").value,ta=new Date(a.pickup_at).getTime(),tb=new Date(b.pickup_at).getTime();
  const asc=ta-tb,desc=tb-ta;
@@ -74,6 +74,7 @@ function tripColor(status){const classes={pending:"ride-pending",confirmed:"ride
 $("dispatch-date").value=bostonDate(new Date());
 $("dispatch-sort").addEventListener("change",()=>{selectedTripIds.clear();load()});
 $("schedule-driver").addEventListener("change",()=>{selectedTripIds.clear();load()});
+let rideSearchDelay=null;$("dispatch-search").addEventListener("input",()=>{clearTimeout(rideSearchDelay);rideSearchDelay=setTimeout(()=>{selectedTripIds.clear();load()},300)});$("dispatch-search-clear").addEventListener("click",()=>{$("dispatch-search").value="";selectedTripIds.clear();load();$("dispatch-search").focus()});
 // Bulk choices are only a preview until Apply is confirmed. Never mutate ride editors.
 function previewSelectedChanges(kind,value){
  for(const row of $("trips").querySelectorAll("tr")){
