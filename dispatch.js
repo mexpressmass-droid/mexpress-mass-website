@@ -269,10 +269,10 @@ function updateRideNotifications(trips){
  $("rides-alert-badge").classList.toggle("hidden",!count);
 }
 
-async function loadMyRides(){
+async function loadMyRides({silent=false}={}){
   if(rideRefreshBusy)return;rideRefreshBusy=true;
   const note=$("my-rides-notice"),list=$("my-rides-list");
-  note.textContent="Loading...";
+  if(!silent)note.textContent="Loading...";
   try{
     const trips=staffRole==="driver"?await api("/rest/v1/trips?select=id,passenger_name,passenger_phone,pickup_at,pickup_address,dropoff_address,dropoff_at,status,notes,assigned_driver_id&assigned_driver_id=eq."+encodeURIComponent(userId)+"&order=pickup_at.asc"):await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"});
     const mine=trips.filter(t=>t.assigned_driver_id===userId&&(["completed","cancelled"].includes(t.status)===(myRidesTab==="history"))).sort((a,b)=>myRidesTab==="history"?new Date(b.pickup_at)-new Date(a.pickup_at):new Date(a.pickup_at)-new Date(b.pickup_at));
@@ -300,9 +300,9 @@ async function loadMyRides(){
       list.append(card);
     }
     note.textContent=mine.length+(myRidesTab==="history"?" ride(s) in history.":" active ride(s) assigned to you.");
-  }catch(e){note.textContent=e.message}finally{rideRefreshBusy=false}
+  }catch(e){if(!silent)note.textContent=e.message;else console.warn("Driver ride refresh failed",e)}finally{rideRefreshBusy=false}
 }
-setInterval(()=>{if(token&&staffRole==="driver"&&!document.hidden)loadMyRides()},8000);
+setInterval(()=>{if(token&&staffRole==="driver"&&!document.hidden&&!rideRefreshBusy)loadMyRides({silent:true})},8000);
 
 $("seed-demo-100-rides").addEventListener("click",async()=>{
  if(!confirm("Create 100 randomly generated TEST rides over the next 30 days? No real customers or drivers will be assigned."))return;
