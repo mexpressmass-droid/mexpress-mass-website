@@ -272,10 +272,13 @@ function updateRideNotifications(trips){
 async function loadMyRides({silent=false}={}){
   if(rideRefreshBusy)return;rideRefreshBusy=true;
   const note=$("my-rides-notice"),list=$("my-rides-list");
+  const refreshTab=myRidesTab;
+  const refreshUser=userId;
   if(!silent)note.textContent="Loading...";
   try{
     const trips=staffRole==="driver"?await api("/rest/v1/trips?select=id,passenger_name,passenger_phone,pickup_at,pickup_address,dropoff_address,dropoff_at,status,notes,assigned_driver_id&assigned_driver_id=eq."+encodeURIComponent(userId)+"&order=pickup_at.asc"):await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"});
     const mine=trips.filter(t=>t.assigned_driver_id===userId&&(["completed","cancelled"].includes(t.status)===(myRidesTab==="history"))).sort((a,b)=>myRidesTab==="history"?new Date(b.pickup_at)-new Date(a.pickup_at):new Date(a.pickup_at)-new Date(b.pickup_at));
+    if(refreshTab!==myRidesTab||refreshUser!==userId)return;
     updateRideNotifications(trips);
     list.replaceChildren();
     for(const trip of mine){
@@ -294,7 +297,7 @@ async function loadMyRides({silent=false}={}){
       const steps=["assigned","on_the_way","arrived","boarded","completed"],i=steps.indexOf(trip.status);
       if(i>=0&&i<steps.length-1){
         const next=steps[i+1],button=el("button","Mark "+next.replaceAll("_"," "));
-        button.addEventListener("click",async()=>{button.disabled=true;try{await api("/rest/v1/rpc/driver_update_trip_status",{method:"POST",body:JSON.stringify({p_trip_id:trip.id,p_new_status:next})});await loadMyRides()}catch(e){note.textContent=e.message;button.disabled=false}});
+        button.addEventListener("click",async()=>{if(rideRefreshBusy)return;button.disabled=true;try{await api("/rest/v1/rpc/driver_update_trip_status",{method:"POST",body:JSON.stringify({p_trip_id:trip.id,p_new_status:next})});await loadMyRides()}catch(e){note.textContent=e.message;button.disabled=false}});
         card.append(button);
       }
       list.append(card);
