@@ -269,8 +269,9 @@ function updateRideNotifications(trips){
  $("rides-alert-badge").classList.toggle("hidden",!count);
 }
 
+let driverStatusSaving=false;
 async function loadMyRides({silent=false}={}){
-  if(rideRefreshBusy)return;rideRefreshBusy=true;
+  if(rideRefreshBusy||driverStatusSaving&&silent)return;rideRefreshBusy=true;
   const note=$("my-rides-notice"),list=$("my-rides-list");
   const refreshTab=myRidesTab;
   const refreshUser=userId;
@@ -297,7 +298,7 @@ async function loadMyRides({silent=false}={}){
       const steps=["assigned","on_the_way","arrived","boarded","completed"],i=steps.indexOf(trip.status);
       if(i>=0&&i<steps.length-1){
         const next=steps[i+1],button=el("button","Mark "+next.replaceAll("_"," "));
-        button.addEventListener("click",async()=>{if(rideRefreshBusy)return;button.disabled=true;try{await api("/rest/v1/rpc/driver_update_trip_status",{method:"POST",body:JSON.stringify({p_trip_id:trip.id,p_new_status:next})});await loadMyRides()}catch(e){note.textContent=e.message;button.disabled=false}});
+        button.addEventListener("click",async()=>{if(driverStatusSaving)return;driverStatusSaving=true;button.disabled=true;try{await api("/rest/v1/rpc/driver_update_trip_status",{method:"POST",body:JSON.stringify({p_trip_id:trip.id,p_new_status:next})});while(rideRefreshBusy)await new Promise(resolve=>setTimeout(resolve,75));await loadMyRides()}catch(e){note.textContent=e.message;button.disabled=false}finally{driverStatusSaving=false}});
         card.append(button);
       }
       list.append(card);
@@ -305,7 +306,7 @@ async function loadMyRides({silent=false}={}){
     note.textContent=mine.length+(myRidesTab==="history"?" ride(s) in history.":" active ride(s) assigned to you.");
   }catch(e){if(!silent)note.textContent=e.message;else console.warn("Driver ride refresh failed",e)}finally{rideRefreshBusy=false}
 }
-setInterval(()=>{if(token&&staffRole==="driver"&&!document.hidden&&!rideRefreshBusy)loadMyRides({silent:true})},8000);
+setInterval(()=>{if(token&&staffRole==="driver"&&!document.hidden&&!rideRefreshBusy&&!driverStatusSaving)loadMyRides({silent:true})},8000);
 
 $("seed-demo-100-rides").addEventListener("click",async()=>{
  if(!confirm("Create 100 randomly generated TEST rides over the next 30 days? No real customers or drivers will be assigned."))return;
