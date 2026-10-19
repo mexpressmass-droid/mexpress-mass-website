@@ -195,12 +195,13 @@ async function employeeAdmin(request,env){
    const driverId=body.assigned_driver_id||null;
    if(driverId!==null&&(typeof driverId!=="string"||!/^[0-9a-f-]{36}$/i.test(driverId)))return reply({error:"Invalid driver"},400);
    
-   if(current.status==="pending"&&driverId!==null)return reply({error:"Confirm this ride first, then assign a driver."},409);
+   if(body.status==="pending"&&driverId!==null)return reply({error:"Pending rides cannot have an assigned driver."},409);
    if(driverId!==null&&driverId!==current.assigned_driver_id){
     const driverResponse=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&id=eq."+encodeURIComponent(driverId)+"&role=eq.driver&is_active=eq.true&limit=1",{headers:serviceHeaders});
     if(!driverResponse.ok||!(await driverResponse.json()).length)return reply({error:"Only active drivers can be assigned"},400);
    }
    if(body.status==="assigned"&&!driverId)return reply({error:"Select a driver before saving Assigned status."},409);
+   if(driverId===null&&["on_the_way","arrived","boarded"].includes(body.status))return reply({error:"Assign a driver before setting this ride in progress."},409);
    const nextStatus=driverId!==null&&["confirmed","assigned"].includes(body.status)?"assigned":body.status;
    const changes={status:nextStatus,pickup_at:pickupTime,dropoff_at:dropoffTime,pickup_address:body.pickup_address.trim(),dropoff_address:body.dropoff_address.trim(),price_cents:body.price_cents,assigned_driver_id:driverId,notes:body.notes,internal_notes:body.internal_notes,updated_at:new Date().toISOString()};
    const saved=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id),{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(changes)});
