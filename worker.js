@@ -114,7 +114,7 @@ async function employeeAdmin(request,env){
    const driverResponse=await fetch(SUPABASE+"/rest/v1/driver_profiles?select=id&id=eq."+encodeURIComponent(driverId)+"&role=eq.driver&is_active=eq.true&limit=1",{headers:serviceHeaders});
    if(!driverResponse.ok||!(await driverResponse.json()).length)return reply({error:"Only active drivers can be assigned"},400);
    const ids=body.ride_ids.join(",");
-   const existingResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,status,archived_at&id=in.("+ids+")",{headers:serviceHeaders});
+   const existingResponse=await fetch(SUPABASE+"/rest/v1/trips?select=id,status,assigned_driver_id,archived_at,updated_at&id=in.("+ids+")",{headers:serviceHeaders});
    if(!existingResponse.ok)return reply({error:"Unable to check selected rides"},502);
    const existing=await existingResponse.json();
    if(existing.length!==body.ride_ids.length||existing.some(t=>t.archived_at!==null))return reply({error:"One or more rides are missing or archived. Refresh and retry."},409);
@@ -122,16 +122,16 @@ async function employeeAdmin(request,env){
    if(existing.some(t=>["completed","cancelled"].includes(t.status)))return reply({error:"Completed or Cancelled rides cannot be reassigned. No rides were changed."},409);
    const now=new Date().toISOString();
    let updatedCount=0;
-   for(const group of [existing.filter(t=>["confirmed","assigned"].includes(t.status)),existing.filter(t=>!["confirmed","assigned"].includes(t.status))]){
-    if(!group.length)continue;
+   for(const ride of existing){
     const patch={assigned_driver_id:driverId,updated_at:now};
-    if(["pending","confirmed","assigned"].includes(group[0].status))patch.status="assigned";
-    const allowedStatuses=[...new Set(group.map(t=>t.status))];
-    const response=await fetch(SUPABASE+"/rest/v1/trips?id=in.("+group.map(t=>t.id).join(",")+")&archived_at=is.null&status=in.("+allowedStatuses.join(",")+")",{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(patch)});
+    if(["confirmed","assigned"].includes(ride.status))patch.status="assigned";
+    const filters="id=eq."+encodeURIComponent(ride.id)+"&status=eq."+encodeURIComponent(ride.status)+"&updated_at=eq."+encodeURIComponent(ride.updated_at)+"&assigned_driver_id="+(ride.assigned_driver_id?"eq."+encodeURIComponent(ride.assigned_driver_id):"is.null")+"&archived_at=is.null";
+    const response=await fetch(SUPABASE+"/rest/v1/trips?"+filters,{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(patch)});
     if(!response.ok){console.error("Bulk assign failed",response.status,await response.text());return reply({error:"Bulk assignment stopped after "+updatedCount+" of "+body.ride_ids.length+" rides. Refresh to review.",count:updatedCount,requested:body.ride_ids.length},502)}
-    updatedCount+=(await response.json()).length;
+    const changed=await response.json();
+    if(changed.length!==1)return reply({error:"A ride changed during bulk assignment. "+updatedCount+" of "+body.ride_ids.length+" rides were assigned. Refresh and review.",count:updatedCount,requested:body.ride_ids.length},409);
+    updatedCount++;
    }
-   if(updatedCount!==body.ride_ids.length)return reply({error:"Only "+updatedCount+" of "+body.ride_ids.length+" rides were assigned. Refresh and review.",count:updatedCount,requested:body.ride_ids.length},409);
    await logEmployeeEvent(env,user,staffRole,"bulk_assign_driver",user.id,{count:updatedCount,driver_id:driverId,ride_ids:body.ride_ids});
    return reply({success:true,count:updatedCount,requested:body.ride_ids.length});
   }
