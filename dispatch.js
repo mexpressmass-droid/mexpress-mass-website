@@ -867,7 +867,7 @@ function dispatchHasUnsavedEdits(){
  if(!panel||panel.classList.contains("hidden"))return true;
  const focused=document.activeElement;
  if(focused&&panel.contains(focused)&&focused.matches("input,textarea,select,[contenteditable]"))return true;
- if(panel.querySelector(".cell-editor-overlay:not(.hidden),.time-editor:not(.hidden)"))return true;
+ if(panel.querySelector(".cell-editor-overlay:not(.hidden),.time-editor:not(.hidden),.time-draft"))return true;
  // Do not discard any unsaved row edits while auto-refreshing.
  for(const row of $("trips").querySelectorAll("tr")){
   for(const field of row.querySelectorAll("input,textarea,select")){
