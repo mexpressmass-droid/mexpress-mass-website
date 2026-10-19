@@ -208,6 +208,8 @@ function renderArchive(){
   const d=bostonDate(t.pickup_at);
   if(driver&&t.assigned_driver_id!==driver||status&&t.status!==status||period!=="all"&&date&&(d<start||d>=end))continue;
   const tr=el("tr");
+  if(t.status==="completed")tr.classList.add("archive-completed");
+  else if(t.status==="cancelled")tr.classList.add("archive-cancelled");
   const cell=el("td"),input=el("input");input.type="checkbox";input.className="archive-select";input.value=t.id;input.checked=selectedArchivedIds.has(t.id);
   input.addEventListener("change",()=>{if(input.checked)selectedArchivedIds.add(t.id);else selectedArchivedIds.delete(t.id);updateArchiveSelection()});
   cell.append(input);tr.append(cell);
