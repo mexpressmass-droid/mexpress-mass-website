@@ -126,7 +126,8 @@ async function employeeAdmin(request,env){
     if(!group.length)continue;
     const patch={assigned_driver_id:driverId,updated_at:now};
     if(["pending","confirmed","assigned"].includes(group[0].status))patch.status="assigned";
-    const response=await fetch(SUPABASE+"/rest/v1/trips?id=in.("+group.map(t=>t.id).join(",")+")&archived_at=is.null",{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(patch)});
+    const allowedStatuses=[...new Set(group.map(t=>t.status))];
+    const response=await fetch(SUPABASE+"/rest/v1/trips?id=in.("+group.map(t=>t.id).join(",")+")&archived_at=is.null&status=in.("+allowedStatuses.join(",")+")",{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(patch)});
     if(!response.ok){console.error("Bulk assign failed",response.status,await response.text());return reply({error:"Bulk assignment stopped after "+updatedCount+" of "+body.ride_ids.length+" rides. Refresh to review.",count:updatedCount,requested:body.ride_ids.length},502)}
     updatedCount+=(await response.json()).length;
    }
