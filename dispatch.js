@@ -50,7 +50,7 @@ async function refreshSession(){if(!refreshToken)throw Error("Session expired");
 async function verifyStaff(){const profile=await api("/rest/v1/driver_profiles?select=role&id=eq."+encodeURIComponent(userId));if(!["admin","dispatcher","driver"].includes(profile[0]?.role))throw Error("This account is not authorized for M Express.");staffRole=profile[0].role;$("tab-archive").classList.toggle("hidden",staffRole==="driver");$("tab-my-rides").classList.toggle("hidden",staffRole!=="driver");$("seed-demo-100-rides").classList.toggle("hidden",staffRole!=="admin");$("tab-dispatch").classList.toggle("hidden",staffRole==="driver");$("dispatch-panel").classList.toggle("hidden",staffRole==="driver");$("tab-employees").classList.toggle("hidden",!["admin","dispatcher"].includes(staffRole));$("employee-admin-tools").classList.toggle("hidden",staffRole!=="admin");$("create-role").value="driver";$("create-role").querySelector('option[value="dispatcher"]').hidden=staffRole!=="admin"}
 function showDashboard(){$("login-panel").classList.add("hidden");$("dashboard").classList.remove("hidden");$("logout").classList.remove("hidden");$("password").value=""}
 async function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");if(!saved?.refresh_token||!saved?.user_id)return;token=saved.access_token;refreshToken=saved.refresh_token;userId=saved.user_id;sessionExpiresAt=saved.expires_at||0;if(Date.now()>sessionExpiresAt-120000)await refreshSession();else scheduleSessionRefresh();await verifyStaff();showDashboard();if(staffRole==="driver"){$("tab-my-rides").click();await loadMyRides()}else{await restoreView();await load()}}catch(e){reset()}}
-function reset(){dispatchAlertSnapshot=null;dispatchAlertEvents=[];closeAttachMenu();$("password").type="password";$("toggle-password").textContent="Show";$("toggle-password").setAttribute("aria-label","Show password");$("toggle-password").setAttribute("aria-pressed","false");clearChatImages();closeChatLightbox();selectedChatFile=null;$("chat-file").value="";$("chat-camera-file").value="";$("chat-file-name").textContent="";if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=null;localStorage.removeItem(SESSION_KEY);localStorage.removeItem(VIEW_KEY);refreshToken=null;sessionExpiresAt=0;if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;chatRenderedId=null;chatLastMessageId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();staffRole=null;token=null;userId=null;drivers=[];allDriverProfiles=[];$("tab-employees").classList.add("hidden");$("employees-panel").classList.add("hidden");$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
+function reset(){closeAttachMenu();$("password").type="password";$("toggle-password").textContent="Show";$("toggle-password").setAttribute("aria-label","Show password");$("toggle-password").setAttribute("aria-pressed","false");clearChatImages();closeChatLightbox();selectedChatFile=null;$("chat-file").value="";$("chat-camera-file").value="";$("chat-file-name").textContent="";if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=null;localStorage.removeItem(SESSION_KEY);localStorage.removeItem(VIEW_KEY);refreshToken=null;sessionExpiresAt=0;if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;chatRenderedId=null;chatLastMessageId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();staffRole=null;token=null;userId=null;drivers=[];allDriverProfiles=[];$("tab-employees").classList.add("hidden");$("employees-panel").classList.add("hidden");$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
 $("login-form").addEventListener("submit",async e=>{e.preventDefault();$("login-error").textContent="";$("login-button").disabled=true;try{const response=await fetch("/api/dispatch/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({login:$("email").value.trim(),password:$("password").value})});const r=await response.json();if(!response.ok)throw Error(r.error||"Login failed");storeSession(r);await verifyStaff();showDashboard();localStorage.removeItem(VIEW_KEY);if(staffRole==="driver"){$("tab-my-rides").click();await loadMyRides()}else await load()}catch(err){reset();$("login-error").textContent=err.message}finally{$("login-button").disabled=false}});
 $("toggle-password").addEventListener("click",()=>{const input=$("password"),visible=input.type==="password";input.type=visible?"text":"password";$("toggle-password").textContent=visible?"Hide":"Show";$("toggle-password").setAttribute("aria-label",visible?"Hide password":"Show password");$("toggle-password").setAttribute("aria-pressed",String(visible))});
 $("logout").addEventListener("click",()=>{if(!confirmLeaveDispatch())return;const oldToken=token;reset();if(oldToken)fetch(BASE+"/auth/v1/logout",{method:"POST",headers:{"apikey":KEY,"Authorization":"Bearer "+oldToken}}).catch(()=>{})});$("refresh").addEventListener("click",load);
@@ -363,48 +363,7 @@ function inferredRoundTripIds(rides){
  }
  return result;
 }
-const DRIVER_ALERT_STATUSES=new Set(["assigned","arrived","boarded","completed","cancelled"]);
-let dispatchAlertEvents=[],dispatchAlertSnapshot=null;
-function dispatchAlertKey(){return "mexpress-dispatch-alerts-"+(userId||"anonymous")}
-function renderDispatchAlerts(){
- const count=dispatchAlertEvents.filter(e=>!e.read).length;
- $("dispatch-alerts-count").textContent=String(count);
- $("dispatch-alerts-count").classList.toggle("hidden",!count);
- const list=$("dispatch-alerts-list");list.replaceChildren();
- if(!dispatchAlertEvents.length){list.append(el("p","No recent driver updates."));return}
- for(const event of dispatchAlertEvents.slice(0,40)){
-  const entry=el("div",new Date(event.at).toLocaleString("en-US",{timeZone:"America/New_York"})+" · "+event.name+" · "+event.message);
-  entry.className="dispatch-alert-entry"+(event.read?"":" unread");list.append(entry);
- }
-}
-function saveDispatchAlerts(){
- try{localStorage.setItem(dispatchAlertKey(),JSON.stringify(dispatchAlertEvents.slice(0,80)))}catch{}
- renderDispatchAlerts();
-}
-function trackDispatchUpdates(trips){
- if(!["admin","dispatcher"].includes(staffRole)||!userId)return;
- const key=dispatchAlertKey();
- if(dispatchAlertSnapshot===null){
-  try{dispatchAlertEvents=JSON.parse(localStorage.getItem(key)||"[]");if(!Array.isArray(dispatchAlertEvents))dispatchAlertEvents=[]}catch{dispatchAlertEvents=[]}
-  dispatchAlertSnapshot=new Map(trips.map(t=>[t.id,{status:t.status,driver:t.assigned_driver_id}]));
-  renderDispatchAlerts();return;
- }
- const next=new Map();
- for(const trip of trips){
-  const before=dispatchAlertSnapshot.get(trip.id);
-  next.set(trip.id,{status:trip.status,driver:trip.assigned_driver_id});
-  if(!before)continue;
-  let message="";
-  if(before.driver!==trip.assigned_driver_id&&trip.assigned_driver_id)message="Driver assigned";
-  if(before.status!==trip.status&&DRIVER_ALERT_STATUSES.has(trip.status))message="Status: "+trip.status.replaceAll("_"," ");
-  if(message)dispatchAlertEvents.unshift({at:new Date().toISOString(),name:trip.passenger_name||"Ride",message,read:false});
- }
- dispatchAlertSnapshot=next;
- if(dispatchAlertEvents.length)saveDispatchAlerts();
-}
-$("dispatch-alerts-toggle").addEventListener("click",()=>$("dispatch-alerts-list").classList.toggle("hidden"));
-$("dispatch-alerts-read").addEventListener("click",()=>{dispatchAlertEvents.forEach(e=>e.read=true);saveDispatchAlerts()});
-async function load({silent=false}={}){if(refreshing)return;refreshing=true;if(!silent)msg("Loading...");try{allDriverProfiles=await api("/rest/v1/driver_profiles?select=id,username,display_name,role,is_active&role=in.(admin,dispatcher,driver)&order=display_name.asc");drivers=allDriverProfiles.filter(d=>d.is_active===true);const scheduleDriver=$("schedule-driver"),selectedScheduleDriver=scheduleDriver.value;scheduleDriver.replaceChildren(new Option("All drivers",""),new Option("Unassigned rides","unassigned"));for(const profile of allDriverProfiles.filter(d=>d.role==="driver"))scheduleDriver.add(new Option(profile.display_name+" ("+profile.username+")"+(profile.is_active?"":" — inactive"),profile.id));scheduleDriver.value=selectedScheduleDriver;if(scheduleDriver.selectedIndex<0)scheduleDriver.value="";const bulkDriver=$("bulk-driver"),previousBulkDriver=bulkDriver.value;bulkDriver.replaceChildren();for(const [id,label] of [["","No driver change"],...drivers.filter(d=>d.role==="driver").map(d=>[d.id,d.display_name+" ("+d.username+")"])]){const opt=el("option",label);opt.value=id;bulkDriver.append(opt)}bulkDriver.value=previousBulkDriver;if(bulkDriver.selectedIndex<0)bulkDriver.value="";const archivedIds=new Set((await employeeAdminRequest({action:"archive_list"})).rides.map(t=>t.id));const activeTrips=(await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"})).filter(t=>!archivedIds.has(t.id));trackDispatchUpdates(activeTrips);// Load drop-off times separately: older dispatch_get_trips RPC versions do not expose this new column.
+async function load({silent=false}={}){if(refreshing)return;refreshing=true;if(!silent)msg("Loading...");try{allDriverProfiles=await api("/rest/v1/driver_profiles?select=id,username,display_name,role,is_active&role=in.(admin,dispatcher,driver)&order=display_name.asc");drivers=allDriverProfiles.filter(d=>d.is_active===true);const scheduleDriver=$("schedule-driver"),selectedScheduleDriver=scheduleDriver.value;scheduleDriver.replaceChildren(new Option("All drivers",""),new Option("Unassigned rides","unassigned"));for(const profile of allDriverProfiles.filter(d=>d.role==="driver"))scheduleDriver.add(new Option(profile.display_name+" ("+profile.username+")"+(profile.is_active?"":" — inactive"),profile.id));scheduleDriver.value=selectedScheduleDriver;if(scheduleDriver.selectedIndex<0)scheduleDriver.value="";const bulkDriver=$("bulk-driver"),previousBulkDriver=bulkDriver.value;bulkDriver.replaceChildren();for(const [id,label] of [["","No driver change"],...drivers.filter(d=>d.role==="driver").map(d=>[d.id,d.display_name+" ("+d.username+")"])]){const opt=el("option",label);opt.value=id;bulkDriver.append(opt)}bulkDriver.value=previousBulkDriver;if(bulkDriver.selectedIndex<0)bulkDriver.value="";const archivedIds=new Set((await employeeAdminRequest({action:"archive_list"})).rides.map(t=>t.id));const activeTrips=(await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"})).filter(t=>!archivedIds.has(t.id));// Load drop-off times separately: older dispatch_get_trips RPC versions do not expose this new column.
 try{
  const extra=await api("/rest/v1/trips?select=id,dropoff_at&limit=5000");
  const byId=new Map(extra.map(t=>[t.id,t.dropoff_at]));
@@ -858,7 +817,7 @@ async function loadEmployeeAudit(){
     if(field==="pickup_at")return new Date(value).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"medium",timeStyle:"short"});
     return String(value);
    };
-   const meaningful=["ride_changed","create_ride","create_driver","create_dispatcher","change_username","reset_password","delete_employee"].includes(e.action);
+   const meaningful=["ride_changed","update_ride","update_ride_contact","bulk_update_status","create_ride","create_driver","create_dispatcher","change_username","reset_password","delete_employee"].includes(e.action);
    if(!meaningful)continue;
    const lines=Object.entries(changes).map(([field,values])=>(labels[field]||field)+": "+show(field,values.before??values.old)+" → "+show(field,values.after??values.new));
    if(!lines.length&&e.action==="ride_changed"){
@@ -870,7 +829,7 @@ async function loadEmployeeAudit(){
    const known=allDriverProfiles.find(d=>d.id===e.actor_id);const whoName=who?who.textContent:known?.display_name||known?.username||e.actor_id.slice(0,8);
    const item=el("div");item.style.padding="12px 0";item.style.borderBottom="1px solid #ddd";
    item.append(el("strong",localDay+" "+clock+" · "+whoName+" · "+e.actor_role));
-   const eventTitle={ride_changed:changes.status?"Ride status changed":"Ride updated",create_ride:"Ride created",create_driver:"Driver account created",create_dispatcher:"Dispatcher account created",change_username:"Username changed",reset_password:"Password reset",delete_employee:"Employee deleted"}[e.action]||e.action;
+   const eventTitle={ride_changed:changes.status?"Ride status changed":"Ride updated",update_ride:changes.status?"Ride status changed":"Ride updated",update_ride_contact:"Ride contact updated",bulk_update_status:"Multiple ride statuses updated",create_ride:"Ride created",create_driver:"Driver account created",create_dispatcher:"Dispatcher account created",change_username:"Username changed",reset_password:"Password reset",delete_employee:"Employee deleted"}[e.action]||e.action;
    item.append(el("div",eventTitle+(e.details?.ride_id?" · Ride "+String(e.details.ride_id).slice(0,8):"")));
    for(const line of lines)item.append(el("div",line));
    item.append(el("small","Source: "+(e.details?.source||"Web / database")));
