@@ -229,7 +229,7 @@ async function employeeAdmin(request,env){
     const date=d.toISOString().slice(0,10);
     const guess=new Date(date+"T"+String(hour).padStart(2,"0")+":"+String(minute).padStart(2,"0")+":00Z");
     const zone=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",timeZoneName:"shortOffset"}).formatToParts(guess).find(p=>p.type==="timeZoneName")?.value||"GMT-4";
-    const match=zone.match(/GMT([+-])(\\d{1,2})(?::(\\d{2}))?/);
+    const match=zone.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
     const offset=match?(match[1]==="-"?-1:1)*(Number(match[2])*60+Number(match[3]||0)):-240;
     return new Date(guess.getTime()-offset*60000).toISOString();
    }
