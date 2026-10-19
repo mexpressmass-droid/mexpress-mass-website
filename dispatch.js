@@ -53,7 +53,7 @@ async function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(
 function reset(){closeAttachMenu();$("password").type="password";$("toggle-password").textContent="Show";$("toggle-password").setAttribute("aria-label","Show password");$("toggle-password").setAttribute("aria-pressed","false");clearChatImages();closeChatLightbox();selectedChatFile=null;$("chat-file").value="";$("chat-camera-file").value="";$("chat-file-name").textContent="";if(sessionRefreshTimer)clearTimeout(sessionRefreshTimer);sessionRefreshTimer=null;localStorage.removeItem(SESSION_KEY);localStorage.removeItem(VIEW_KEY);refreshToken=null;sessionExpiresAt=0;if(chatPoll)clearInterval(chatPoll);chatPoll=null;currentChatId=null;chatRenderedId=null;chatLastMessageId=null;$("chat-form").classList.add("hidden");$("chat-thread").replaceChildren();selectedTripIds.clear();staffRole=null;token=null;userId=null;drivers=[];allDriverProfiles=[];$("tab-employees").classList.add("hidden");$("employees-panel").classList.add("hidden");$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");$("login-panel").classList.remove("hidden");$("password").value="";$("trips").replaceChildren()}
 $("login-form").addEventListener("submit",async e=>{e.preventDefault();$("login-error").textContent="";$("login-button").disabled=true;try{const response=await fetch("/api/dispatch/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({login:$("email").value.trim(),password:$("password").value})});const r=await response.json();if(!response.ok)throw Error(r.error||"Login failed");storeSession(r);await verifyStaff();showDashboard();localStorage.removeItem(VIEW_KEY);if(staffRole==="driver"){$("tab-my-rides").click();await loadMyRides()}else await load()}catch(err){reset();$("login-error").textContent=err.message}finally{$("login-button").disabled=false}});
 $("toggle-password").addEventListener("click",()=>{const input=$("password"),visible=input.type==="password";input.type=visible?"text":"password";$("toggle-password").textContent=visible?"Hide":"Show";$("toggle-password").setAttribute("aria-label",visible?"Hide password":"Show password");$("toggle-password").setAttribute("aria-pressed",String(visible))});
-$("logout").addEventListener("click",()=>{const oldToken=token;reset();if(oldToken)fetch(BASE+"/auth/v1/logout",{method:"POST",headers:{"apikey":KEY,"Authorization":"Bearer "+oldToken}}).catch(()=>{})});$("refresh").addEventListener("click",load);
+$("logout").addEventListener("click",()=>{if(!confirmLeaveDispatch())return;const oldToken=token;reset();if(oldToken)fetch(BASE+"/auth/v1/logout",{method:"POST",headers:{"apikey":KEY,"Authorization":"Bearer "+oldToken}}).catch(()=>{})});$("refresh").addEventListener("click",load);
 $("refresh-my-rides").addEventListener("click",loadMyRides);
 for(const id of ["dispatch-range","dispatch-date"])$(id).addEventListener("change",()=>{selectedTripIds.clear();saveView();load()});
 for(const [id,tab] of [["my-active","active"],["my-history","history"]])$(id).addEventListener("click",()=>{myRidesTab=tab;$("my-active").classList.toggle("active",tab==="active");$("my-history").classList.toggle("active",tab==="history");loadMyRides();saveView()});
@@ -221,12 +221,12 @@ function renderArchive(){
 for(const id of ["archive-driver","archive-status","archive-period","archive-date"])$(id).addEventListener("change",renderArchive);
 $("archive-refresh").addEventListener("click",loadArchive);
 $("archive-date").value=bostonDate(new Date());
-$("tab-archive").addEventListener("click",async()=>{for(const id of ["dispatch-panel","my-rides-panel","messages-panel","employees-panel"])$(id).classList.add("hidden");$("archive-panel").classList.remove("hidden");for(const id of ["tab-dispatch","tab-my-rides","tab-messages","tab-employees","tab-archive"])$(id).classList.toggle("active",id==="tab-archive");await loadArchive()});
+$("tab-archive").addEventListener("click",async()=>{if(!confirmLeaveDispatch())return;for(const id of ["dispatch-panel","my-rides-panel","messages-panel","employees-panel"])$(id).classList.add("hidden");$("archive-panel").classList.remove("hidden");for(const id of ["tab-dispatch","tab-my-rides","tab-messages","tab-employees","tab-archive"])$(id).classList.toggle("active",id==="tab-archive");await loadArchive()});
 $("bulk-apply").addEventListener("click",async()=>{const ids=[...selectedTripIds],status=$("bulk-status").value;if(!ids.length)return;const chosenDriver=$("bulk-driver").value;if(chosenDriver&&status&&status!=="assigned"){msg("Choose either a bulk status or a driver, not both. Clear the status selection before assigning.",true);return}if(chosenDriver){if(!confirm("Assign "+ids.length+" selected ride(s) to the chosen driver? Confirmed rides become Assigned; Pending rides must be confirmed first."))return;const button=$("bulk-apply");button.disabled=true;try{const result=await employeeAdminRequest({action:"bulk_assign_driver",ride_ids:ids,assigned_driver_id:chosenDriver});if(result.count!==ids.length)throw Error("Some rides were not updated. Refresh and review.");selectedTripIds.clear();$("bulk-driver").value="";await load();msg(result.count+" ride(s) assigned to driver.")}catch(e){await load();msg(e.message,true)}finally{button.disabled=false;updateSelection()}return}if(status==="archive"){if(!confirm("Move "+ids.length+" selected Completed/Cancelled rides to Archive?"))return;try{const result=await employeeAdminRequest({action:"archive_rides",ride_ids:ids});if(result.count!==ids.length)throw Error("Not all rides archived");selectedTripIds.clear();await load();msg(result.count+" ride(s) archived.")}catch(e){msg(e.message,true)}return}if(status==="delete"){await permanentlyDeleteRides(ids,async()=>{selectedTripIds.clear();await load();msg(ids.length+" ride(s) permanently deleted.")});return}const labels={pending:"Pending",confirmed:"Confirmed",assigned:"Assigned",on_the_way:"On the Way",arrived:"Arrived",boarded:"Boarded",completed:"Completed",cancelled:"Cancelled"};if(!labels[status])return;if(status==="assigned"&&!chosenDriver){msg("Select Driver before saving Assigned status. For multiple rides, choose a driver in the top Select Driver list.",true);return}const warning=status==="pending"?" Assigned drivers will be removed from these rides.":status==="cancelled"?" This will cancel the selected rides.":status==="completed"?" This will mark the selected rides completed.":"";if(!confirm("Change "+ids.length+" selected ride(s) to "+labels[status]+"?"+warning))return;const button=$("bulk-apply");button.disabled=true;try{const result=await employeeAdminRequest({action:"bulk_update_status",ride_ids:ids,status});if(result.count!==ids.length)throw Error("Only "+result.count+" of "+ids.length+" rides were updated. Refresh and review.");selectedTripIds.clear();await load();msg(result.count+" ride(s) updated.")}catch(e){msg(e.message,true)}finally{button.disabled=false;updateSelection()}});
 
 
 for(const [tab,panel,other] of [["tab-dispatch","dispatch-panel","my-rides-panel"],["tab-my-rides","my-rides-panel","dispatch-panel"]]){
-  $(tab).addEventListener("click",()=>{$(panel).classList.remove("hidden");$(other).classList.add("hidden");$("employees-panel").classList.add("hidden");$("archive-panel").classList.add("hidden");$("tab-archive").classList.remove("active");$("messages-panel").classList.add("hidden");$("tab-messages").classList.remove("active");$("tab-dispatch").classList.toggle("active",tab==="tab-dispatch");$("tab-my-rides").classList.toggle("active",tab==="tab-my-rides");if(tab==="tab-my-rides")loadMyRides();saveView()});
+  $(tab).addEventListener("click",()=>{if(!confirmLeaveDispatch())return;$(panel).classList.remove("hidden");$(other).classList.add("hidden");$("employees-panel").classList.add("hidden");$("archive-panel").classList.add("hidden");$("tab-archive").classList.remove("active");$("messages-panel").classList.add("hidden");$("tab-messages").classList.remove("active");$("tab-dispatch").classList.toggle("active",tab==="tab-dispatch");$("tab-my-rides").classList.toggle("active",tab==="tab-my-rides");if(tab==="tab-my-rides")loadMyRides();saveView()});
 }
 // Per-driver ride snapshots detect assignments and schedule edits while this web app is open.
 let rideRefreshBusy=false;
@@ -675,7 +675,7 @@ $("chat-thread").addEventListener("scroll",()=>{
  if(thread.scrollHeight-thread.scrollTop-thread.clientHeight<CHAT_BOTTOM_THRESHOLD&&currentChatId&&chatLatestTimestamp)markChatRead(currentChatId,chatLatestTimestamp);
 },{passive:true});
 
-$("tab-messages").addEventListener("click",async()=>{
+$("tab-messages").addEventListener("click",async()=>{if(!confirmLeaveDispatch())return;
   $("dispatch-panel").classList.add("hidden");$("my-rides-panel").classList.add("hidden");$("employees-panel").classList.add("hidden");$("messages-panel").classList.remove("hidden");
   for(const id of ["tab-dispatch","tab-my-rides","tab-messages","tab-employees"])$(id).classList.toggle("active",id==="tab-messages");
   try{await loadChatDirectory();await loadChatMessages()}catch(e){chatNotice(e.message,true)}
@@ -862,6 +862,24 @@ $("employee-password-form").addEventListener("submit",async e=>{
 });
 // Refresh the dispatcher view periodically without interrupting edits or selections.
 let dispatchAutoRefreshBusy=false;
+function dispatchHasPendingChanges(){
+ const panel=$("dispatch-panel");
+ if(!panel||panel.classList.contains("hidden"))return false;
+ if(panel.querySelector(".time-draft"))return true;
+ for(const field of $("trips").querySelectorAll("input,textarea,select")){
+  if(["checkbox","button","hidden"].includes(field.type))continue;
+  if(field.dataset.loadedValue!==undefined&&field.value!==field.dataset.loadedValue)return true;
+ }
+ return false;
+}
+window.addEventListener("beforeunload",event=>{
+ if(!dispatchHasPendingChanges())return;
+ event.preventDefault();
+ event.returnValue="";
+});
+function confirmLeaveDispatch(){
+ return !dispatchHasPendingChanges()||confirm("You have unsaved ride changes. Leave without saving?");
+}
 function dispatchHasUnsavedEdits(){
  const panel=$("dispatch-panel");
  if(!panel||panel.classList.contains("hidden"))return true;
