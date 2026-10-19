@@ -59,7 +59,7 @@ for(const id of ["dispatch-range","dispatch-date"])$(id).addEventListener("chang
 for(const [id,tab] of [["my-active","active"],["my-history","history"]])$(id).addEventListener("click",()=>{myRidesTab=tab;$("my-active").classList.toggle("active",tab==="active");$("my-history").classList.toggle("active",tab==="history");loadMyRides();saveView()});
 function bostonDate(value){return new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value))}
 function addDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)}
-function visibleTrip(t){const range=$("dispatch-range").value,day=$("dispatch-date").value,date=bostonDate(t.pickup_at);return range==="all"||!day||(range==="day"?date===day:date>=day&&date<addDays(day,7))}
+function visibleTrip(t){const driver=$("schedule-driver")?.value||"";if(driver&&((driver==="unassigned"&&t.assigned_driver_id)||(driver!=="unassigned"&&t.assigned_driver_id!==driver)))return false;const range=$("dispatch-range").value,day=$("dispatch-date").value,date=bostonDate(t.pickup_at);return range==="all"||!day||(range==="day"?date===day:date>=day&&date<addDays(day,7))}
 function compareDispatchRides(a,b){
  const mode=$("dispatch-sort").value,ta=new Date(a.pickup_at).getTime(),tb=new Date(b.pickup_at).getTime();
  const asc=ta-tb,desc=tb-ta;
@@ -73,6 +73,7 @@ function compareDispatchRides(a,b){
 function tripColor(status){const classes={pending:"ride-pending",confirmed:"ride-confirmed",assigned:"ride-assigned",on_the_way:"ride-assigned",arrived:"ride-assigned",boarded:"ride-assigned",completed:"ride-completed",cancelled:"ride-cancelled"};return classes[status]||""}
 $("dispatch-date").value=bostonDate(new Date());
 $("dispatch-sort").addEventListener("change",()=>{selectedTripIds.clear();load()});
+$("schedule-driver").addEventListener("change",()=>{selectedTripIds.clear();load()});
 // Bulk choices are only a preview until Apply is confirmed. Never mutate ride editors.
 function previewSelectedChanges(kind,value){
  for(const row of $("trips").querySelectorAll("tr")){
@@ -347,7 +348,7 @@ function inferredRoundTripIds(rides){
  }
  return result;
 }
-async function load(){if(refreshing)return;refreshing=true;msg("Loading...");try{allDriverProfiles=await api("/rest/v1/driver_profiles?select=id,username,display_name,role,is_active&role=in.(admin,dispatcher,driver)&order=display_name.asc");drivers=allDriverProfiles.filter(d=>d.is_active===true);const bulkDriver=$("bulk-driver"),previousBulkDriver=bulkDriver.value;bulkDriver.replaceChildren();for(const [id,label] of [["","No driver change"],...drivers.filter(d=>d.role==="driver").map(d=>[d.id,d.display_name+" ("+d.username+")"])]){const opt=el("option",label);opt.value=id;bulkDriver.append(opt)}bulkDriver.value=previousBulkDriver;if(bulkDriver.selectedIndex<0)bulkDriver.value="";const archivedIds=new Set((await employeeAdminRequest({action:"archive_list"})).rides.map(t=>t.id));const activeTrips=(await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"})).filter(t=>!archivedIds.has(t.id));// Load drop-off times separately: older dispatch_get_trips RPC versions do not expose this new column.
+async function load(){if(refreshing)return;refreshing=true;msg("Loading...");try{allDriverProfiles=await api("/rest/v1/driver_profiles?select=id,username,display_name,role,is_active&role=in.(admin,dispatcher,driver)&order=display_name.asc");drivers=allDriverProfiles.filter(d=>d.is_active===true);const scheduleDriver=$("schedule-driver"),selectedScheduleDriver=scheduleDriver.value;scheduleDriver.replaceChildren(new Option("All drivers",""),new Option("Unassigned rides","unassigned"));for(const profile of allDriverProfiles.filter(d=>d.role==="driver"))scheduleDriver.add(new Option(profile.display_name+" ("+profile.username+")"+(profile.is_active?"":" — inactive"),profile.id));scheduleDriver.value=selectedScheduleDriver;if(scheduleDriver.selectedIndex<0)scheduleDriver.value="";const bulkDriver=$("bulk-driver"),previousBulkDriver=bulkDriver.value;bulkDriver.replaceChildren();for(const [id,label] of [["","No driver change"],...drivers.filter(d=>d.role==="driver").map(d=>[d.id,d.display_name+" ("+d.username+")"])]){const opt=el("option",label);opt.value=id;bulkDriver.append(opt)}bulkDriver.value=previousBulkDriver;if(bulkDriver.selectedIndex<0)bulkDriver.value="";const archivedIds=new Set((await employeeAdminRequest({action:"archive_list"})).rides.map(t=>t.id));const activeTrips=(await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"})).filter(t=>!archivedIds.has(t.id));// Load drop-off times separately: older dispatch_get_trips RPC versions do not expose this new column.
 try{
  const extra=await api("/rest/v1/trips?select=id,dropoff_at&limit=5000");
  const byId=new Map(extra.map(t=>[t.id,t.dropoff_at]));
@@ -515,7 +516,7 @@ const save=el("button","Save");save.addEventListener("click",async()=>{
  if(!confirm("Confirm changes to this ride?"))return;
  save.disabled=true;try{const cents=price.value.trim()===""?null:Math.round(Number(price.value)*100);if(cents!==null&&(!Number.isSafeInteger(cents)||cents<0))throw Error("Invalid price");await employeeAdminRequest({action:"update_ride",ride_id:trip.id,status:status.value,price_cents:cents,assigned_driver_id:driver.value||null,pickup_at:timeLocked?trip.pickup_at:changedBostonTime(trip.pickup_at,puEdit.value),dropoff_at:timeLocked?trip.dropoff_at:(dropEdit.value?(trip.dropoff_at?changedBostonTime(trip.dropoff_at,dropEdit.value):changedBostonTime(trip.pickup_at,dropEdit.value)):null),pickup_address:pickupInput.value,dropoff_address:dropoffInput.value,notes:driverComment.value.trim()||null,internal_notes:internal.value.trim()||null});await load();msg("Ride updated.")}catch(err){msg(err.message,true)}finally{save.disabled=false}
 });td(row,save);
-body.append(row)}updateSelection();msg(trips.length+" ride(s) in selected view.");}catch(err){msg(err.message,true)}finally{refreshing=false}}
+body.append(row)}const scheduled=trips.filter(t=>t.assigned_driver_id).length;const pending=trips.filter(t=>t.status==="pending").length;$("schedule-summary").textContent=trips.length+" shown · "+scheduled+" assigned · "+(trips.length-scheduled)+" unassigned · "+pending+" pending";updateSelection();msg(trips.length+" ride(s) in selected view.");}catch(err){msg(err.message,true)}finally{refreshing=false}}
 
 let currentChatId=null,chatPoll=null,chatRenderedId=null,chatLastMessageId=null,chatLoading=false,chatForceBottom=false,chatLatestTimestamp=null,chatOtherReadAt=null;
 const CHAT_BOTTOM_THRESHOLD=75;
