@@ -70,7 +70,7 @@ function compareDispatchRides(a,b){
  const now=Date.now(),aPriority=a.status==="pending"&&ta>=now?0:1,bPriority=b.status==="pending"&&tb>=now?0:1;
  return aPriority-bPriority||asc||String(a.id).localeCompare(String(b.id));
 }
-function tripColor(status){return status==="pending"?"ride-pending":status==="assigned"?"ride-assigned":status==="completed"?"ride-completed":status==="cancelled"?"ride-cancelled":""}
+function tripColor(status){const classes={pending:"ride-pending",confirmed:"ride-confirmed",assigned:"ride-assigned",on_the_way:"ride-on-the-way",arrived:"ride-arrived",boarded:"ride-boarded",completed:"ride-completed",cancelled:"ride-cancelled"};return classes[status]||""}
 $("dispatch-date").value=bostonDate(new Date());
 $("dispatch-sort").addEventListener("change",()=>{selectedTripIds.clear();load()});
 // Bulk choices are only a preview until Apply is confirmed. Never mutate ride editors.
