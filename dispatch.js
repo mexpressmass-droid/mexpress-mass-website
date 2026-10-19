@@ -363,6 +363,27 @@ function inferredRoundTripIds(rides){
  }
  return result;
 }
+$("driver-stats-toggle").addEventListener("click",()=>{
+ const panel=$("driver-stats-panel"),expanded=panel.classList.toggle("hidden")===false;
+ $("driver-stats-toggle").setAttribute("aria-expanded",String(expanded));
+});
+function renderDriverStats(rides){
+ const totals=new Map();
+ for(const profile of allDriverProfiles.filter(p=>p.role==="driver"))totals.set(profile.id,{name:profile.display_name||profile.username||"Driver",completed:0,cancelled:0,value:0});
+ for(const ride of rides){
+  if(!ride.assigned_driver_id)continue;
+  if(!totals.has(ride.assigned_driver_id))totals.set(ride.assigned_driver_id,{name:"Former driver",completed:0,cancelled:0,value:0});
+  const item=totals.get(ride.assigned_driver_id);
+  if(ride.status==="completed"){item.completed++;item.value+=Number(ride.price_cents)||0}
+  if(ride.status==="cancelled")item.cancelled++;
+ }
+ const rows=$("driver-stats-rows");rows.replaceChildren();
+ for(const entry of [...totals.values()].sort((a,b)=>b.completed-a.completed||a.name.localeCompare(b.name))){
+  const tr=el("tr");
+  for(const value of [entry.name,entry.completed,entry.cancelled,"$"+(entry.value/100).toFixed(2)])td(tr,el("span",String(value)));
+  rows.append(tr);
+ }
+}
 async function load({silent=false}={}){if(refreshing)return;refreshing=true;if(!silent)msg("Loading...");try{allDriverProfiles=await api("/rest/v1/driver_profiles?select=id,username,display_name,role,is_active&role=in.(admin,dispatcher,driver)&order=display_name.asc");drivers=allDriverProfiles.filter(d=>d.is_active===true);const scheduleDriver=$("schedule-driver"),selectedScheduleDriver=scheduleDriver.value;scheduleDriver.replaceChildren(new Option("All drivers",""),new Option("Unassigned rides","unassigned"));for(const profile of allDriverProfiles.filter(d=>d.role==="driver"))scheduleDriver.add(new Option(profile.display_name+" ("+profile.username+")"+(profile.is_active?"":" — inactive"),profile.id));scheduleDriver.value=selectedScheduleDriver;if(scheduleDriver.selectedIndex<0)scheduleDriver.value="";const bulkDriver=$("bulk-driver"),previousBulkDriver=bulkDriver.value;bulkDriver.replaceChildren();for(const [id,label] of [["","No driver change"],...drivers.filter(d=>d.role==="driver").map(d=>[d.id,d.display_name+" ("+d.username+")"])]){const opt=el("option",label);opt.value=id;bulkDriver.append(opt)}bulkDriver.value=previousBulkDriver;if(bulkDriver.selectedIndex<0)bulkDriver.value="";const archivedIds=new Set((await employeeAdminRequest({action:"archive_list"})).rides.map(t=>t.id));const activeTrips=(await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"})).filter(t=>!archivedIds.has(t.id));// Load drop-off times separately: older dispatch_get_trips RPC versions do not expose this new column.
 try{
  const extra=await api("/rest/v1/trips?select=id,dropoff_at&limit=5000");
@@ -373,7 +394,7 @@ try{
 const versions=await api("/rest/v1/trips?select=id,updated_at&limit=5000");
 const versionById=new Map(versions.map(t=>[t.id,t.updated_at]));
 for(const t of activeTrips)t.updated_at=versionById.get(t.id)||t.updated_at||null;
-const inferredRoundTrips=inferredRoundTripIds(activeTrips);const trips=activeTrips.filter(visibleTrip).sort(compareDispatchRides).slice(0,200);const body=$("trips");body.replaceChildren();visibleTripIds=trips.map(t=>t.id);visibleTripStatuses=new Map(trips.map(t=>[t.id,t.status]));for(const id of [...selectedTripIds])if(!visibleTripIds.includes(id))selectedTripIds.delete(id);for(const trip of trips){const row=el("tr");row.className=tripColor(trip.status);if(["pending","confirmed","assigned","on_the_way"].includes(trip.status)&&Date.parse(trip.pickup_at)<Date.now()){row.classList.add("overdue-ride");row.title="Pickup time has passed and ride is not yet boarded or completed";}if((trip.internal_notes||"").trim())row.classList.add("has-internal-comments");else if(trip.status==="cancelled")row.classList.add("cancelled-no-internal-comments");const check=el("input");check.type="checkbox";check.className="trip-select";check.value=trip.id;check.checked=selectedTripIds.has(trip.id);check.setAttribute("aria-label","Select ride for "+trip.passenger_name);check.addEventListener("pointerdown",event=>event.stopPropagation());check.addEventListener("click",event=>event.stopPropagation());check.addEventListener("change",event=>{event.stopPropagation();if(check.checked)selectedTripIds.add(trip.id);else selectedTripIds.delete(trip.id);updateSelection()});td(row,check);
+renderDriverStats(activeTrips.filter(visibleTrip));const inferredRoundTrips=inferredRoundTripIds(activeTrips);const trips=activeTrips.filter(visibleTrip).sort(compareDispatchRides).slice(0,200);const body=$("trips");body.replaceChildren();visibleTripIds=trips.map(t=>t.id);visibleTripStatuses=new Map(trips.map(t=>[t.id,t.status]));for(const id of [...selectedTripIds])if(!visibleTripIds.includes(id))selectedTripIds.delete(id);for(const trip of trips){const row=el("tr");row.className=tripColor(trip.status);if(["pending","confirmed","assigned","on_the_way"].includes(trip.status)&&Date.parse(trip.pickup_at)<Date.now()){row.classList.add("overdue-ride");row.title="Pickup time has passed and ride is not yet boarded or completed";}if((trip.internal_notes||"").trim())row.classList.add("has-internal-comments");else if(trip.status==="cancelled")row.classList.add("cancelled-no-internal-comments");const check=el("input");check.type="checkbox";check.className="trip-select";check.value=trip.id;check.checked=selectedTripIds.has(trip.id);check.setAttribute("aria-label","Select ride for "+trip.passenger_name);check.addEventListener("pointerdown",event=>event.stopPropagation());check.addEventListener("click",event=>event.stopPropagation());check.addEventListener("change",event=>{event.stopPropagation();if(check.checked)selectedTripIds.add(trip.id);else selectedTripIds.delete(trip.id);updateSelection()});td(row,check);
 const autoSelectForEdit=(event)=>{
  const target=event.target;
  if(target===check||target.closest?.('button')?.textContent==="Save")return;
