@@ -492,30 +492,16 @@ const archivedAssigned=allDriverProfiles.find(d=>d.id===trip.assigned_driver_id&
 const driverComment=el("textarea");driverComment.rows=2;driverComment.maxLength=4000;driverComment.className="driver-comment-edit";driverComment.title=trip.notes||"Driver comments — visible to assigned driver";driverComment.placeholder="Notes for driver";driverComment.value=[trip.wheelchair_required&&!/\bwheelchair\b/i.test(trip.notes||"")?"Wheelchair required":null,trip.notes||null].filter(Boolean).join(" | ");expandOnClick(driverComment,"Driver Comments");td(row,driverComment);const internal=el("textarea");internal.rows=2;internal.maxLength=4000;internal.title=trip.internal_notes||"Internal comments";internal.placeholder="Staff only — not visible to driver";internal.value=trip.internal_notes||"";internal.addEventListener("input",()=>{row.classList.toggle("has-internal-comments",!!internal.value.trim());row.classList.toggle("cancelled-no-internal-comments",!internal.value.trim()&&trip.status==="cancelled")});expandOnClick(internal,"Internal Comments");td(row,internal);
 const save=el("button","Save");save.addEventListener("click",async()=>{
  const selectedAction=status.value;
- if(selectedAction==="assigned"&&!driver.value&&!$("bulk-driver").value){msg("Select a driver before saving Assigned status.",true);return}
+ // Row Save always affects this ride only, regardless of bulk selection.
+ // Multi-ride changes must use the explicit Apply to selected toolbar.
+ if(selectedAction==="assigned"&&!driver.value){msg("Select a driver for this ride before saving Assigned status.",true);return}
  if(selectedAction==="archive"||selectedAction==="delete"){
-  const ids=selectedTripIds.size>1&&selectedTripIds.has(trip.id)?[...selectedTripIds]:[trip.id];
+  const ids=[trip.id];
   if(selectedAction==="archive"){
-   if(!confirm("Move "+ids.length+" selected ride(s) to Archive? Only Completed/Cancelled rides are eligible."))return;
+   if(!confirm("Move this ride to Archive? Only Completed/Cancelled rides are eligible."))return;
    save.disabled=true;
-   try{const result=await employeeAdminRequest({action:"archive_rides",ride_ids:ids});if(result.count!==ids.length)throw Error("Not all rides were archived");ids.forEach(id=>selectedTripIds.delete(id));await load();msg(result.count+" ride(s) moved to Archive.")}catch(err){msg(err.message,true)}finally{save.disabled=false}
-  }else await permanentlyDeleteRides(ids,async()=>{ids.forEach(id=>selectedTripIds.delete(id));await load();msg(ids.length+" ride(s) permanently deleted.")});
-  return;
- }
- const bulkDriverId=selectedTripIds.size>1&&selectedTripIds.has(trip.id)?driver.value:"";
- if(bulkDriverId&&bulkDriverId!==trip.assigned_driver_id){
-  const ids=[...selectedTripIds];
-  if(!confirm("Assign the selected driver to "+ids.length+" rides? Confirmed rides will become Assigned. Pending rides must be confirmed first."))return;
-  save.disabled=true;
-  try{const result=await employeeAdminRequest({action:"bulk_assign_driver",ride_ids:ids,assigned_driver_id:bulkDriverId});if(result.count!==ids.length)throw Error("Some rides were not updated. Refresh and review.");selectedTripIds.clear();await load();msg(result.count+" ride(s) assigned.")}catch(err){msg(err.message,true)}finally{save.disabled=false;updateSelection()}
-  return;
- }
- const bulk=selectedTripIds.size>1&&selectedTripIds.has(trip.id);
- if(bulk){
-  const ids=[...selectedTripIds],label=status.options[status.selectedIndex]?.textContent||status.value;
-  if(!confirm("Apply status '"+label+"' to all "+ids.length+" selected rides? Only status will change; other fields will stay unchanged."))return;
-  save.disabled=true;
-  try{const result=await employeeAdminRequest({action:"bulk_update_status",ride_ids:ids,status:status.value});selectedTripIds.clear();await load();msg(result.count+" ride(s) updated.")}catch(err){msg(err.message,true)}finally{save.disabled=false;updateSelection()}
+   try{const result=await employeeAdminRequest({action:"archive_rides",ride_ids:ids});if(result.count!==1)throw Error("Ride was not archived");selectedTripIds.delete(trip.id);await load();msg("Ride moved to Archive.")}catch(err){msg(err.message,true)}finally{save.disabled=false}
+  }else await permanentlyDeleteRides(ids,async()=>{selectedTripIds.delete(trip.id);await load();msg("Ride permanently deleted.")});
   return;
  }
  if(!confirm("Confirm changes to this ride?"))return;
