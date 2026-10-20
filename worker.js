@@ -342,6 +342,35 @@ async function employeeAdmin(request,env){
    await logEmployeeEvent(env,user,staffRole,"seed_demo_rides",user.id,{count:created.length,tag});
    return reply({success:true,count:created.length});
   }
+  if(body.action==="import_sfrt_csv"){
+   const rides=body.rides;
+   if(!Array.isArray(rides)||rides.length<1||rides.length>200)return reply({error:"Import must contain 1–200 rides"},400);
+   const validId=v=>typeof v==="string"&&/^[A-Za-z0-9_-]{3,64}$/.test(v);
+   const required=["passenger_name","passenger_phone","pickup_address","dropoff_address","pickup_at"];
+   const seen=new Set();
+   for(const ride of rides){
+    if(!ride||typeof ride!=="object"||!validId(ride.trip_num)||seen.has(ride.trip_num))return reply({error:"Missing or duplicate SFRT Trip Num"},400);
+    seen.add(ride.trip_num);
+    if(required.some(k=>typeof ride[k]!=="string"||!ride[k].trim()||ride[k].length>500)||!Number.isFinite(Date.parse(ride.pickup_at)))return reply({error:"Invalid passenger, address or pickup time for "+ride.trip_num},400);
+    if(ride.dropoff_at!==null&&ride.dropoff_at!==undefined&&!Number.isFinite(Date.parse(ride.dropoff_at)))return reply({error:"Invalid appointment time for "+ride.trip_num},400);
+    if(!Number.isSafeInteger(ride.price_cents)||ride.price_cents<0||ride.price_cents>10000000)return reply({error:"Invalid fare for "+ride.trip_num},400);
+    if(typeof ride.miles!=="number"||!Number.isFinite(ride.miles)||ride.miles<0||ride.miles>10000)return reply({error:"Invalid miles for "+ride.trip_num},400);
+    if(typeof ride.notes!=="string"||ride.notes.length>3000)return reply({error:"Invalid driver notes for "+ride.trip_num},400);
+   }
+   const results={created:0,skipped:0,failed:[],created_trip_nums:[]};
+   for(const ride of rides){
+    const marker="SFRT Trip Num: "+ride.trip_num;
+    const existing=await fetch(SUPABASE+"/rest/v1/trips?select=id&source=eq.sfrt_csv&internal_notes=eq."+encodeURIComponent(marker)+"&limit=1",{headers:serviceHeaders});
+    if(!existing.ok){results.failed.push({trip_num:ride.trip_num,error:"Duplicate check unavailable"});break}
+    if((await existing.json()).length){results.skipped++;continue}
+    const record={passenger_name:ride.passenger_name.trim(),passenger_phone:ride.passenger_phone.trim(),pickup_address:ride.pickup_address.trim(),dropoff_address:ride.dropoff_address.trim(),pickup_at:new Date(ride.pickup_at).toISOString(),dropoff_at:ride.dropoff_at?new Date(ride.dropoff_at).toISOString():null,price_cents:ride.price_cents,notes:ride.notes.trim()||null,internal_notes:marker,source:"sfrt_csv",status:"confirmed",trip_type:"one_way",wheelchair_required:false,assigned_driver_id:null};
+    const created=await fetch(SUPABASE+"/rest/v1/trips",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(record)});
+    if(!created.ok){console.error("SFRT import insert failed",created.status,await created.text());results.failed.push({trip_num:ride.trip_num,error:"Database insert failed"});break}
+    const rows=await created.json();results.created++;results.created_trip_nums.push(ride.trip_num);
+    await logEmployeeEvent(env,user,staffRole,"import_sfrt_csv",rows[0]?.id||user.id,{ride_id:rows[0]?.id,trip_num:ride.trip_num,miles:ride.miles,fare_cents:ride.price_cents});
+   }
+   return reply({success:results.failed.length===0,...results},results.failed.length?409:200);
+  }
   if(body.action==="create_ride"){
    const fields=["passenger_name","passenger_phone","pickup_address","dropoff_address","pickup_at"];
    if(fields.some(k=>typeof body[k]!=="string"||!body[k].trim()||body[k].length>500))return reply({error:"Passenger, phone, addresses and pickup time are required"},400);
