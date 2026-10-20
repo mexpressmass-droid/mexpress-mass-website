@@ -963,7 +963,7 @@ function dispatchHasUnsavedEdits(){
  for(const row of $("trips").querySelectorAll("tr")){
   for(const field of row.querySelectorAll("input,textarea,select")){
    if(field.type==="checkbox"||field.type==="button"||field.type==="hidden")continue;
-   if(field.value!==field.dataset.loadedValue)return true;
+   if(field.dataset.loadedValue!==undefined&&field.value!==field.dataset.loadedValue)return true;
   }
  }
  return selectedTripIds.size>0;
