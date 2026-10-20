@@ -146,6 +146,7 @@ async function employeeAdmin(request,env){
     if(changed.length!==1)return reply({error:"A ride changed during bulk assignment. "+updatedCount+" of "+body.ride_ids.length+" rides were assigned. Refresh and review.",count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds},409);
     updatedCount++;
     updatedRideIds.push(ride.id);
+    await logEmployeeEvent(env,user,staffRole,"bulk_assign_driver",ride.id,{ride_id:ride.id,driver_id:driverId,batch_size:body.ride_ids.length});
    }
    await logEmployeeEvent(env,user,staffRole,"bulk_assign_driver",user.id,{count:updatedCount,driver_id:driverId,ride_ids:body.ride_ids});
    return reply({success:true,count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds});
@@ -173,6 +174,7 @@ async function employeeAdmin(request,env){
     if(changed.length!==1)return reply({error:"A ride changed while applying bulk status. "+updatedCount+" of "+body.ride_ids.length+" rides were updated. Refresh and review.",count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds},409);
     updatedCount++;
     updatedRideIds.push(ride.id);
+    await logEmployeeEvent(env,user,staffRole,"bulk_update_status",ride.id,{ride_id:ride.id,status:body.status,batch_size:body.ride_ids.length});
    }
    await logEmployeeEvent(env,user,staffRole,"bulk_update_status",user.id,{count:updatedCount,status:body.status,ride_ids:body.ride_ids});
    return reply({success:true,count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds});
