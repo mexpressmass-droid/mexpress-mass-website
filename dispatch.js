@@ -579,6 +579,14 @@ const save=el("button","Save");save.addEventListener("click",async()=>{
  const index=activeTrips.findIndex(item=>item.id===trip.id);
  if(index>=0)activeTrips[index]=latest;
  visibleTripStatuses.set(trip.id,latest.status);
+ // If the saved ride no longer matches the active filters, remove only its row.
+ // Other ride drafts must remain mounted and untouched.
+ if(!visibleTrip(latest)){
+  fresh.remove();
+  visibleTripIds=visibleTripIds.filter(id=>id!==trip.id);
+  visibleTripStatuses.delete(trip.id);
+  selectedTripIds.delete(trip.id);
+ }
  updateSelection();updateUnsavedIndicator();
  msg("Ride updated. Other unsaved edits were preserved.");
  }catch(err){if(/changed by another user|version information is missing|archived\. Restore/i.test(err.message)){let details="";
