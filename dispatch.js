@@ -410,16 +410,8 @@ const versions=await api("/rest/v1/trips?select=id,updated_at&limit=5000");
 const versionById=new Map(versions.map(t=>[t.id,t.updated_at]));
 for(const t of activeTrips)t.updated_at=versionById.get(t.id)||t.updated_at||null;
 const inferredRoundTrips=inferredRoundTripIds(activeTrips);const trips=activeTrips.filter(visibleTrip).sort(compareDispatchRides).slice(0,200);const body=$("trips");body.replaceChildren();visibleTripIds=trips.map(t=>t.id);visibleTripStatuses=new Map(trips.map(t=>[t.id,t.status]));for(const id of [...selectedTripIds])if(!visibleTripIds.includes(id))selectedTripIds.delete(id);const renderRideRow=(trip)=>{const row=el("tr");row.className=tripColor(trip.status);if(["pending","confirmed","assigned","on_the_way"].includes(trip.status)&&Date.parse(trip.pickup_at)<Date.now()){row.classList.add("overdue-ride");row.title="Pickup time has passed and ride is not yet boarded or completed";}if((trip.internal_notes||"").trim())row.classList.add("has-internal-comments");else if(trip.status==="cancelled")row.classList.add("cancelled-no-internal-comments");const check=el("input");check.type="checkbox";check.className="trip-select";check.value=trip.id;check.checked=selectedTripIds.has(trip.id);check.setAttribute("aria-label","Select ride for "+trip.passenger_name);check.addEventListener("pointerdown",event=>event.stopPropagation());check.addEventListener("click",event=>event.stopPropagation());check.addEventListener("change",event=>{event.stopPropagation();if(check.checked)selectedTripIds.add(trip.id);else selectedTripIds.delete(trip.id);updateSelection()});td(row,check);
-const autoSelectForEdit=(event)=>{
- const target=event.target;
- if(target===check||target.closest?.('button')?.textContent==="Save")return;
- if(!target.closest?.('input:not([type="checkbox"]),textarea,.compact-ellipsis,.compact-route-item button'))return;
- if(!selectedTripIds.has(trip.id))chooseRide(trip.id,event.ctrlKey||event.metaKey);
-};
-row.addEventListener("focusin",autoSelectForEdit);
-row.addEventListener("pointerdown",autoSelectForEdit);
-row.addEventListener("input",autoSelectForEdit);
-row.addEventListener("change",autoSelectForEdit);
+// Editing a field must not change bulk selection. Select rides only via checkbox
+// or by tapping/clicking the non-interactive area of a ride card/row.
 row.addEventListener("click",event=>{
  const target=event.target;
  if(target.closest("input,textarea,select,button,a,label,.compact-ellipsis,.time-cell-clickable,[contenteditable],.cell-expandable"))return;
