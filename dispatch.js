@@ -385,7 +385,8 @@ function parseSfrtCsv(text){
    seen.add(val("trip"));
    const fare=Number(val("fare")),miles=Number(val("miles")),escort=Number(val("escort")||0);
    if(!Number.isFinite(fare)||fare<0||!Number.isFinite(miles)||miles<0||!Number.isInteger(escort)||escort<0||escort>20)throw Error("Invalid fare, miles or escort");
-   const notes=[escort>0?escort+" escort(s) accompanying passenger":null,val("comments")||null,"Distance: "+miles+" miles"].filter(Boolean).join("\n");
+   const homebound=val("appt").toUpperCase()==="0000A";
+   const notes=[homebound?"Return-home trip — no fixed drop-off appointment. Allow at least 90 minutes for transport; not a strict deadline.":null,escort>0?escort+" escort(s) accompanying passenger":null,val("comments")||null,"Distance: "+miles+" miles"].filter(Boolean).join("\n");
    rides.push({trip_num:val("trip"),passenger_name:val("name"),passenger_phone:val("phone"),pickup_at:sfrtTime(val("date"),val("pickup")),dropoff_at:val("appt").toUpperCase()==="0000A"||!val("appt")?null:sfrtTime(val("date"),val("appt")),pickup_address:sfrtAddress(val("pickupAddress"),val("pickupCity")),dropoff_address:sfrtAddress(val("dropAddress"),val("dropCity")),price_cents:Math.round(fare*100),miles,notes});
   }catch(error){errors.push("CSV line "+(i+1)+": "+error.message)}
  }
