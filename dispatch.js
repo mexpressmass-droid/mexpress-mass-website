@@ -578,27 +578,9 @@ const save=el("button","Save");save.addEventListener("click",async()=>{
    details=changed.length?" Updated by another user: "+changed.join(", ")+".":" The ride version changed; review the latest record.";
   }else details=" The ride may no longer be available.";
  }catch(e){console.warn("Could not load conflict details",e)}
- msg("Save blocked: "+err.message+details+" Use Reload latest version to refresh only this ride, or copy your edits first.",true);row.classList.add("unsaved-row");reloadLatest.classList.remove("hidden")}else msg(err.message,true)}finally{save.disabled=false}
+ msg("Save blocked: "+err.message+details+" Your unsaved edits remain on screen. Copy them before refreshing.",true);row.classList.add("unsaved-row")}else msg(err.message,true)}finally{save.disabled=false}
 });
-const reloadLatest=el("button","Reload latest version");
-reloadLatest.type="button";reloadLatest.className="hidden";
-reloadLatest.title="Discard only this ride's local edits and load its latest saved version";
-reloadLatest.addEventListener("click",async()=>{
- if(row.querySelector(".unsaved-field,.time-draft")&&!confirm("Discard unsaved changes to this ride only and reload its latest version? Other rides will not be changed."))return;
- reloadLatest.disabled=true;
- try{
-  const records=await api("/rest/v1/trips?select=*&id=eq."+encodeURIComponent(trip.id)+"&limit=1");
-  if(!records.length)throw Error("Ride not found. It may have been deleted.");
-  if(records[0].archived_at)throw Error("Ride is now archived. Open Archive to view it.");
-  const latest=records[0];
-  const fresh=renderRideRow(latest);
-  row.replaceWith(fresh);
-  msg("Latest version loaded for this ride only.");
-  updateUnsavedIndicator();
- }catch(error){msg("Unable to reload ride: "+error.message,true);reloadLatest.disabled=false}
-});
-const actions=el("div");actions.className="ride-row-actions";actions.append(save,reloadLatest);
-td(row,actions);
+td(row,save);
 for(const field of row.querySelectorAll("input,textarea,select")){if(field.type!=="checkbox"&&field.type!=="button"&&field.type!=="hidden"){field.dataset.loadedValue=field.value;const markDraft=()=>{const changed=field.value!==field.dataset.loadedValue;field.classList.toggle("unsaved-field",changed);row.classList.toggle("unsaved-row",!!row.querySelector(".unsaved-field,.time-draft"));updateUnsavedIndicator()};field.addEventListener("input",markDraft);field.addEventListener("change",markDraft)}}return row;};for(const trip of trips)body.append(renderRideRow(trip));updateUnsavedIndicator();const scheduled=trips.filter(t=>t.assigned_driver_id).length;const pending=trips.filter(t=>t.status==="pending").length;$("schedule-summary").textContent=trips.length+" shown · "+scheduled+" assigned · "+(trips.length-scheduled)+" unassigned · "+pending+" pending";const completed=trips.filter(t=>t.status==="completed");const revenue=completed.reduce((sum,t)=>sum+(Number(t.price_cents)||0),0)/100;const activeDrivers=new Set(trips.filter(t=>t.assigned_driver_id).map(t=>t.assigned_driver_id)).size;updateSelection();if(!silent)msg(trips.length+" ride(s) in selected view.");}catch(err){if(!silent)msg(err.message,true);else console.warn("Silent dispatch refresh failed",err)}finally{refreshing=false}}
 
 let currentChatId=null,chatPoll=null,chatRenderedId=null,chatLastMessageId=null,chatLoading=false,chatForceBottom=false,chatLatestTimestamp=null,chatOtherReadAt=null;
