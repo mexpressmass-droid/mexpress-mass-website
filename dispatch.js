@@ -394,6 +394,11 @@ function parseSfrtCsv(text){
  if(!rides.length)throw Error("No rides found");
  return rides;
 }
+$("import-csv-check").addEventListener("click",async()=>{
+ const notice=$("import-csv-notice");notice.textContent="Checking saved SFRT rides...";
+ try{const result=await employeeAdminRequest({action:"list_sfrt_imports"});notice.textContent=result.count+" SFRT rides currently saved in Supabase."}
+ catch(error){notice.textContent="Import check failed: "+error.message}
+});
 $("import-csv-toggle").addEventListener("click",()=>{$("import-csv-panel").classList.toggle("hidden")});
 $("import-csv-cancel").addEventListener("click",()=>{$("import-csv-panel").classList.add("hidden")});
 $("import-csv-file").addEventListener("change",async()=>{
