@@ -418,10 +418,26 @@ $("import-csv-submit").addEventListener("click",async()=>{
  const notice=$("import-csv-notice");notice.textContent="Importing...";
  try{
   if(dispatchHasPendingChanges())throw Error("Save existing dispatch edits before importing.");
-  const result=await employeeAdminRequest({action:"import_sfrt_csv",rides:pendingSfrtRides});
-  const failureDetails=(result.failed||[]).map(f=>f.trip_num+": "+f.error).join(" | ");
-  pendingSfrtRides=[];await load();
-  notice.textContent=result.created+" created, "+result.skipped+" already imported, "+(result.failed||[]).length+" failed."+(failureDetails?" Errors: "+failureDetails:"")+" Check imported rides before retrying.";
+  const ridesToImport=[...pendingSfrtRides],batchSize=5;
+  let created=0,skipped=0,failed=[];
+  for(let offset=0;offset<ridesToImport.length;offset+=batchSize){
+   const batch=ridesToImport.slice(offset,offset+batchSize);
+   notice.textContent="Importing rides "+(offset+1)+"–"+Math.min(offset+batch.length,ridesToImport.length)+" of "+ridesToImport.length+" · "+created+" created, "+skipped+" skipped...";
+   let result;
+   try{result=await employeeAdminRequest({action:"import_sfrt_csv",rides:batch})}
+   catch(error){
+    notice.textContent="Import interrupted after batch "+Math.ceil(offset/batchSize)+". "+created+" confirmed created, "+skipped+" confirmed skipped. The current batch may have been partially saved. "+error.message+" Re-select the same CSV and retry; saved SFRT Trip Nums are skipped.";
+    try{await load()}catch(refreshError){console.warn("Refresh after interrupted import failed",refreshError)}
+    return;
+   }
+   created+=result.created||0;skipped+=result.skipped||0;
+   failed.push(...(result.failed||[]));
+  }
+  pendingSfrtRides=[];
+  const failureDetails=failed.map(f=>f.trip_num+": "+f.error).join(" | ");
+  notice.textContent=created+" created, "+skipped+" already imported, "+failed.length+" failed."+(failureDetails?" Errors: "+failureDetails:"");
+  try{await load()}catch(refreshError){notice.textContent+=" Trips were processed, but refreshing the dispatch board failed: "+refreshError.message}
+
  }catch(error){notice.textContent=error.message+(error.importResult?.created!==undefined?" · "+error.importResult.created+" created, "+error.importResult.skipped+" skipped.":"")+". Retry the same file after checking the error; existing trip numbers are skipped.";if(error.importResult?.created)await load()}
  finally{button.disabled=false}
 });
