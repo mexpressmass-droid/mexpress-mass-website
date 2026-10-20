@@ -135,18 +135,20 @@ async function employeeAdmin(request,env){
    if(existing.some(t=>["completed","cancelled"].includes(t.status)))return reply({error:"Completed or Cancelled rides cannot be reassigned. No rides were changed."},409);
    const now=new Date().toISOString();
    let updatedCount=0;
+   const updatedRideIds=[];
    for(const ride of existing){
     const patch={assigned_driver_id:driverId,updated_at:now};
     if(["confirmed","assigned"].includes(ride.status))patch.status="assigned";
     const filters="id=eq."+encodeURIComponent(ride.id)+"&status=eq."+encodeURIComponent(ride.status)+"&updated_at=eq."+encodeURIComponent(ride.updated_at)+"&assigned_driver_id="+(ride.assigned_driver_id?"eq."+encodeURIComponent(ride.assigned_driver_id):"is.null")+"&archived_at=is.null";
     const response=await fetch(SUPABASE+"/rest/v1/trips?"+filters,{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(patch)});
-    if(!response.ok){console.error("Bulk assign failed",response.status,await response.text());return reply({error:"Bulk assignment stopped after "+updatedCount+" of "+body.ride_ids.length+" rides. Refresh to review.",count:updatedCount,requested:body.ride_ids.length},502)}
+    if(!response.ok){console.error("Bulk assign failed",response.status,await response.text());return reply({error:"Bulk assignment stopped after "+updatedCount+" of "+body.ride_ids.length+" rides. Refresh to review.",count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds},502)}
     const changed=await response.json();
-    if(changed.length!==1)return reply({error:"A ride changed during bulk assignment. "+updatedCount+" of "+body.ride_ids.length+" rides were assigned. Refresh and review.",count:updatedCount,requested:body.ride_ids.length},409);
+    if(changed.length!==1)return reply({error:"A ride changed during bulk assignment. "+updatedCount+" of "+body.ride_ids.length+" rides were assigned. Refresh and review.",count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds},409);
     updatedCount++;
+    updatedRideIds.push(ride.id);
    }
    await logEmployeeEvent(env,user,staffRole,"bulk_assign_driver",user.id,{count:updatedCount,driver_id:driverId,ride_ids:body.ride_ids});
-   return reply({success:true,count:updatedCount,requested:body.ride_ids.length});
+   return reply({success:true,count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds});
   }
   if(body.action==="bulk_update_status"){
    const allowed=["pending","confirmed","assigned","on_the_way","arrived","boarded","completed","cancelled"];
@@ -162,16 +164,18 @@ async function employeeAdmin(request,env){
    if(body.status==="pending")patch.assigned_driver_id=null;
    // Compare each row's version and driver at write time to avoid overwriting concurrent edits.
    let updatedCount=0;
+   const updatedRideIds=[];
    for(const ride of rides){
     const filters="id=eq."+encodeURIComponent(ride.id)+"&updated_at=eq."+encodeURIComponent(ride.updated_at)+"&status=eq."+encodeURIComponent(ride.status)+"&assigned_driver_id="+(ride.assigned_driver_id?"eq."+encodeURIComponent(ride.assigned_driver_id):"is.null")+"&archived_at=is.null";
     const response=await fetch(SUPABASE+"/rest/v1/trips?"+filters,{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(patch)});
-    if(!response.ok){console.error("Bulk status failed",response.status,await response.text());return reply({error:"Bulk status stopped after "+updatedCount+" of "+body.ride_ids.length+" rides. Refresh and review.",count:updatedCount,requested:body.ride_ids.length},502)}
+    if(!response.ok){console.error("Bulk status failed",response.status,await response.text());return reply({error:"Bulk status stopped after "+updatedCount+" of "+body.ride_ids.length+" rides. Refresh and review.",count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds},502)}
     const changed=await response.json();
-    if(changed.length!==1)return reply({error:"A ride changed while applying bulk status. "+updatedCount+" of "+body.ride_ids.length+" rides were updated. Refresh and review.",count:updatedCount,requested:body.ride_ids.length},409);
+    if(changed.length!==1)return reply({error:"A ride changed while applying bulk status. "+updatedCount+" of "+body.ride_ids.length+" rides were updated. Refresh and review.",count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds},409);
     updatedCount++;
+    updatedRideIds.push(ride.id);
    }
    await logEmployeeEvent(env,user,staffRole,"bulk_update_status",user.id,{count:updatedCount,status:body.status,ride_ids:body.ride_ids});
-   return reply({success:true,count:updatedCount,requested:body.ride_ids.length});
+   return reply({success:true,count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds});
   }
   if(body.action==="update_ride_address"){
    if(typeof body.ride_id!=="string"||!/^[0-9a-f-]{36}$/i.test(body.ride_id))return reply({error:"Invalid ride"},400);
