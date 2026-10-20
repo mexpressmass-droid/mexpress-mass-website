@@ -367,15 +367,15 @@ async function employeeAdmin(request,env){
    for(const ride of rides){
     const marker="SFRT Trip Num: "+ride.trip_num;
     const existing=await fetch(SUPABASE+"/rest/v1/trips?select=id&source=eq.dispatch&internal_notes=eq."+encodeURIComponent(marker)+"&limit=1",{headers:serviceHeaders});
-    if(!existing.ok){const detail=await existing.json().catch(()=>({}));console.error("SFRT duplicate lookup failed",existing.status,detail);results.failed.push({trip_num:ride.trip_num,error:"Duplicate check failed ("+existing.status+"): "+String(detail.message||detail.code||"Database error").slice(0,220)});break}
+    if(!existing.ok){const detail=await existing.json().catch(()=>({}));console.error("SFRT duplicate lookup failed",existing.status,detail);results.failed.push({trip_num:ride.trip_num,error:"Duplicate check failed ("+existing.status+"): "+String(detail.message||detail.code||"Database error").slice(0,220)});continue}
     if((await existing.json()).length){results.skipped++;continue}
     const record={passenger_name:ride.passenger_name.trim(),passenger_phone:ride.passenger_phone.trim(),pickup_address:ride.pickup_address.trim(),dropoff_address:ride.dropoff_address.trim(),pickup_at:new Date(ride.pickup_at).toISOString(),dropoff_at:ride.dropoff_at?new Date(ride.dropoff_at).toISOString():null,price_cents:ride.price_cents,distance_miles:ride.miles,notes:ride.notes.trim()||null,internal_notes:marker,source:"dispatch",status:"confirmed",trip_type:"one_way",wheelchair_required:false,assigned_driver_id:null};
     const created=await fetch(SUPABASE+"/rest/v1/trips",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(record)});
-    if(!created.ok){const detail=await created.json().catch(()=>({}));console.error("SFRT import insert failed",created.status,detail);results.failed.push({trip_num:ride.trip_num,error:"Insert failed ("+created.status+"): "+String(detail.message||detail.code||"Database error").slice(0,220)});break}
+    if(!created.ok){const detail=await created.json().catch(()=>({}));console.error("SFRT import insert failed",created.status,detail);results.failed.push({trip_num:ride.trip_num,error:"Insert failed ("+created.status+"): "+String(detail.message||detail.code||"Database error").slice(0,220)});continue}
     const rows=await created.json();results.created++;results.created_trip_nums.push(ride.trip_num);
-    await logEmployeeEvent(env,user,staffRole,"import_sfrt_csv",rows[0]?.id||user.id,{ride_id:rows[0]?.id,trip_num:ride.trip_num,miles:ride.miles,fare_cents:ride.price_cents});
+    try{await logEmployeeEvent(env,user,staffRole,"import_sfrt_csv",rows[0]?.id||user.id,{ride_id:rows[0]?.id,trip_num:ride.trip_num,miles:ride.miles,fare_cents:ride.price_cents})}catch(logError){console.error("SFRT audit log failed",ride.trip_num,logError)}
    }
-   return reply({success:results.failed.length===0,...results,error:results.failed.length?"SFRT "+results.failed[0].trip_num+": "+results.failed[0].error:undefined},results.failed.length?409:200);
+   return reply({success:results.failed.length===0,...results,error:results.failed.length?"SFRT "+results.failed[0].trip_num+": "+results.failed[0].error:undefined},200);
   }
   if(body.action==="create_ride"){
    const fields=["passenger_name","passenger_phone","pickup_address","dropoff_address","pickup_at"];
