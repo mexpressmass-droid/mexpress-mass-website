@@ -552,6 +552,8 @@ const save=el("button","Save");save.addEventListener("click",async()=>{
  // Multi-ride changes must use the explicit Apply to selected toolbar.
  if(selectedAction==="assigned"&&!driver.value){msg("Select a driver for this ride before saving Assigned status.",true);return}
  if(selectedAction==="archive"||selectedAction==="delete"){
+  const dirtyOther=[...$("trips").querySelectorAll("tr")].some(other=>other!==row&&(other.querySelector(".time-draft")||[...other.querySelectorAll("input,textarea,select")].some(field=>!["checkbox","button","hidden"].includes(field.type)&&field.dataset.loadedValue!==undefined&&field.value!==field.dataset.loadedValue)));
+  if(dirtyOther){msg("Save or discard changes in other rides before archiving or deleting. These actions refresh the board.",true);return}
   const ids=[trip.id];
   if(selectedAction==="archive"){
    if(!confirm("Move this ride to Archive? Only Completed/Cancelled rides are eligible."))return;
