@@ -414,8 +414,9 @@ $("import-csv-submit").addEventListener("click",async()=>{
  try{
   if(dispatchHasPendingChanges())throw Error("Save existing dispatch edits before importing.");
   const result=await employeeAdminRequest({action:"import_sfrt_csv",rides:pendingSfrtRides});
-  notice.textContent=result.created+" created, "+result.skipped+" already imported.";
+  notice.textContent=result.created+" created, "+result.skipped+" already imported. Refreshing dispatch...";
   pendingSfrtRides=[];await load();
+  notice.textContent=result.created+" created, "+result.skipped+" already imported. Imported rides are now included in the Dispatch list; select All dates to see them.";
  }catch(error){notice.textContent=error.message+(error.importResult?.created!==undefined?" · "+error.importResult.created+" created, "+error.importResult.skipped+" skipped.":"")+". Retry the same file after checking the error; existing trip numbers are skipped.";if(error.importResult?.created)await load()}
  finally{button.disabled=false}
 });
@@ -493,7 +494,11 @@ function renderDriverStats(rides){
  for(const value of ["Total",total.completed,total.cancelled,"$"+(total.value/100).toFixed(2)])td(tr,el("strong",String(value)));
  rows.append(tr);
 }
-async function load({silent=false}={}){if(refreshing)return;refreshing=true;if(!silent)msg("Loading...");try{allDriverProfiles=await api("/rest/v1/driver_profiles?select=id,username,display_name,role,is_active&role=in.(admin,dispatcher,driver)&order=display_name.asc");drivers=allDriverProfiles.filter(d=>d.is_active===true);const scheduleDriver=$("schedule-driver"),selectedScheduleDriver=scheduleDriver.value;scheduleDriver.replaceChildren(new Option("All drivers",""),new Option("Unassigned rides","unassigned"));for(const profile of allDriverProfiles.filter(d=>d.role==="driver"))scheduleDriver.add(new Option(profile.display_name+" ("+profile.username+")"+(profile.is_active?"":" — inactive"),profile.id));scheduleDriver.value=selectedScheduleDriver;if(scheduleDriver.selectedIndex<0)scheduleDriver.value="";const bulkDriver=$("bulk-driver"),previousBulkDriver=bulkDriver.value;bulkDriver.replaceChildren();for(const [id,label] of [["","No driver change"],...drivers.filter(d=>d.role==="driver").map(d=>[d.id,d.display_name+" ("+d.username+")"])]){const opt=el("option",label);opt.value=id;bulkDriver.append(opt)}bulkDriver.value=previousBulkDriver;if(bulkDriver.selectedIndex<0)bulkDriver.value="";const archivedIds=new Set((await employeeAdminRequest({action:"archive_list"})).rides.map(t=>t.id));const activeTrips=(await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"})).filter(t=>!archivedIds.has(t.id));// Load drop-off times separately: older dispatch_get_trips RPC versions do not expose this new column.
+async function load({silent=false}={}){if(refreshing)return;refreshing=true;if(!silent)msg("Loading...");try{allDriverProfiles=await api("/rest/v1/driver_profiles?select=id,username,display_name,role,is_active&role=in.(admin,dispatcher,driver)&order=display_name.asc");drivers=allDriverProfiles.filter(d=>d.is_active===true);const scheduleDriver=$("schedule-driver"),selectedScheduleDriver=scheduleDriver.value;scheduleDriver.replaceChildren(new Option("All drivers",""),new Option("Unassigned rides","unassigned"));for(const profile of allDriverProfiles.filter(d=>d.role==="driver"))scheduleDriver.add(new Option(profile.display_name+" ("+profile.username+")"+(profile.is_active?"":" — inactive"),profile.id));scheduleDriver.value=selectedScheduleDriver;if(scheduleDriver.selectedIndex<0)scheduleDriver.value="";const bulkDriver=$("bulk-driver"),previousBulkDriver=bulkDriver.value;bulkDriver.replaceChildren();for(const [id,label] of [["","No driver change"],...drivers.filter(d=>d.role==="driver").map(d=>[d.id,d.display_name+" ("+d.username+")"])]){const opt=el("option",label);opt.value=id;bulkDriver.append(opt)}bulkDriver.value=previousBulkDriver;if(bulkDriver.selectedIndex<0)bulkDriver.value="";const archivedIds=new Set((await employeeAdminRequest({action:"archive_list"})).rides.map(t=>t.id));const rpcTrips=await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"});
+const imported=await employeeAdminRequest({action:"list_sfrt_imports"});
+const allById=new Map(rpcTrips.map(t=>[t.id,t]));
+for(const trip of imported.rides||[])allById.set(trip.id,{...allById.get(trip.id),...trip});
+const activeTrips=[...allById.values()].filter(t=>!archivedIds.has(t.id));// Load drop-off times separately: older dispatch_get_trips RPC versions do not expose this new column.
 try{
  const extra=await api("/rest/v1/trips?select=id,dropoff_at,distance_miles&limit=5000");
  const byId=new Map(extra.map(t=>[t.id,t]));
