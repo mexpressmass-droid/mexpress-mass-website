@@ -421,7 +421,7 @@ for(const t of activeTrips)t.updated_at=versionById.get(t.id)||t.updated_at||nul
 // A refresh may have started before the user began editing another ride.
  // Never replace the board with a stale response while local drafts exist.
  if(silent&&dispatchHasUnsavedEdits())return;
- const inferredRoundTrips=inferredRoundTripIds(activeTrips);const trips=activeTrips.filter(visibleTrip).sort(compareDispatchRides).slice(0,200);const body=$("trips");body.replaceChildren();visibleTripIds=trips.map(t=>t.id);visibleTripStatuses=new Map(trips.map(t=>[t.id,t.status]));for(const id of [...selectedTripIds])if(!visibleTripIds.includes(id))selectedTripIds.delete(id);const renderRideRow=(trip)=>{const row=el("tr");row.className=tripColor(trip.status);if(["pending","confirmed","assigned","on_the_way"].includes(trip.status)&&Date.parse(trip.pickup_at)<Date.now()){row.classList.add("overdue-ride");row.title="Pickup time has passed and ride is not yet boarded or completed";}if((trip.internal_notes||"").trim())row.classList.add("has-internal-comments");else if(trip.status==="cancelled")row.classList.add("cancelled-no-internal-comments");const check=el("input");check.type="checkbox";check.className="trip-select";check.value=trip.id;check.checked=selectedTripIds.has(trip.id);check.setAttribute("aria-label","Select ride for "+trip.passenger_name);check.addEventListener("pointerdown",event=>event.stopPropagation());check.addEventListener("click",event=>event.stopPropagation());check.addEventListener("change",event=>{event.stopPropagation();if(check.checked)selectedTripIds.add(trip.id);else selectedTripIds.delete(trip.id);updateSelection()});td(row,check);
+ const inferredRoundTrips=inferredRoundTripIds(activeTrips);const trips=activeTrips.filter(visibleTrip).sort(compareDispatchRides).slice(0,200);const body=$("trips");body.replaceChildren();visibleTripIds=trips.map(t=>t.id);visibleTripStatuses=new Map(trips.map(t=>[t.id,t.status]));for(const id of [...selectedTripIds])if(!visibleTripIds.includes(id))selectedTripIds.delete(id);const renderRideRow=(trip)=>{const row=el("tr");row.dataset.pickupTimestamp=String(Date.parse(trip.pickup_at));row.dataset.rideStatus=trip.status;row.className=tripColor(trip.status);if(["pending","confirmed","assigned","on_the_way"].includes(trip.status)&&Date.parse(trip.pickup_at)<Date.now()){row.classList.add("overdue-ride");row.title="Pickup time has passed and ride is not yet boarded or completed";}if((trip.internal_notes||"").trim())row.classList.add("has-internal-comments");else if(trip.status==="cancelled")row.classList.add("cancelled-no-internal-comments");const check=el("input");check.type="checkbox";check.className="trip-select";check.value=trip.id;check.checked=selectedTripIds.has(trip.id);check.setAttribute("aria-label","Select ride for "+trip.passenger_name);check.addEventListener("pointerdown",event=>event.stopPropagation());check.addEventListener("click",event=>event.stopPropagation());check.addEventListener("change",event=>{event.stopPropagation();if(check.checked)selectedTripIds.add(trip.id);else selectedTripIds.delete(trip.id);updateSelection()});td(row,check);
 // Editing a field must not change bulk selection. Select rides only via checkbox
 // or by tapping/clicking the non-interactive area of a ride card/row.
 row.addEventListener("click",event=>{
@@ -596,7 +596,7 @@ const save=el("button","Save");save.addEventListener("click",async()=>{
   visibleTripStatuses.delete(trip.id);
   selectedTripIds.delete(trip.id);
  }
- updateSelection();updateUnsavedIndicator();
+ updateSelection();updateUnsavedIndicator();refreshOverdueSummary();
  msg("Ride updated. Other unsaved edits were preserved.");
  }catch(err){if(/changed by another user|version information is missing|archived\. Restore/i.test(err.message)){let details="";
  try{
@@ -960,6 +960,21 @@ window.addEventListener("online",()=>{
  else if(["admin","dispatcher"].includes(staffRole)&&!refreshing&&!dispatchHasUnsavedEdits())load({silent:true});
 });
 refreshConnectionNotice();
+function refreshOverdueSummary(){
+ const summary=$("overdue-summary"),body=$("trips");
+ if(!summary||!body)return;
+ let count=0;
+ for(const row of body.querySelectorAll("tr")){
+  const pickup=Number(row.dataset.pickupTimestamp);
+  const status=row.dataset.rideStatus;
+  const overdue=Number.isFinite(pickup)&&pickup>0&&pickup<Date.now()&&["pending","confirmed","assigned","on_the_way"].includes(status);
+  row.classList.toggle("overdue-ride",overdue);
+  if(overdue)count++;
+ }
+ summary.classList.toggle("hidden",count===0);
+ summary.textContent=count===1?"1 overdue ride in the displayed list.":count+" overdue rides in the displayed list.";
+}
+setInterval(refreshOverdueSummary,60000);
 function dispatchHasPendingChanges(){
  // Include pending editors that render outside the dispatch table.
  if(document.querySelector(".cell-editor-overlay,.contact-action-popover"))return true;
