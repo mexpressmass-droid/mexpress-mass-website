@@ -342,6 +342,12 @@ async function employeeAdmin(request,env){
    await logEmployeeEvent(env,user,staffRole,"seed_demo_rides",user.id,{count:created.length,tag});
    return reply({success:true,count:created.length});
   }
+  if(body.action==="list_sfrt_imports"){
+   const response=await fetch(SUPABASE+"/rest/v1/trips?select=*&source=eq.sfrt_csv&order=pickup_at.desc&limit=1000",{headers:serviceHeaders,cache:"no-store"});
+   if(!response.ok){console.error("SFRT import lookup failed",response.status,await response.text());return reply({error:"Unable to check imported rides"},502)}
+   const rides=await response.json();
+   return reply({rides,count:rides.length});
+  }
   if(body.action==="import_sfrt_csv"){
    const rides=body.rides;
    if(!Array.isArray(rides)||rides.length<1||rides.length>200)return reply({error:"Import must contain 1–200 rides"},400);
