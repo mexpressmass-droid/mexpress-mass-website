@@ -335,6 +335,90 @@ $("seed-demo-100-rides").addEventListener("click",async()=>{
 // Dispatchers and administrators can create rides without accessing the Supabase service key.
 $("create-ride-toggle").addEventListener("click",()=>{const panel=$("create-ride-panel");panel.classList.toggle("hidden");const chooser=$("new-driver");chooser.replaceChildren(new Option("Unassigned",""));/* Pending rides must be created unassigned. */chooser.disabled=true;});
 $("create-ride-cancel").addEventListener("click",()=>$("create-ride-panel").classList.add("hidden"));
+
+let pendingSfrtRides=[];
+function csvRows(text){
+ const rows=[];let row=[],cell="",quoted=false;
+ for(let i=0;i<text.length;i++){const c=text[i];if(quoted){if(c==='"'&&text[i+1]==='"'){cell+='"';i++}else if(c==='"')quoted=false;else cell+=c}
+ else if(c==='"')quoted=true;else if(c===','){row.push(cell);cell=""}else if(c==='\n'){row.push(cell.replace(/\r$/,""));rows.push(row);row=[];cell=""}else cell+=c}
+ if(quoted)throw Error("Unclosed quote in CSV");
+ if(cell||row.length){row.push(cell.replace(/\r$/,""));rows.push(row)}
+ return rows;
+}
+function sfrtTime(date,time){
+ const d=String(date||"").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+ const t=String(time||"").trim().toUpperCase().match(/^(\d{2})(\d{2})([AP])$/);
+ if(!d||!t)throw Error("Invalid SFRT date or time: "+date+" "+time);
+ const month=+d[1],day=+d[2],year=+d[3],hour=+t[1],minute=+t[2];
+ if(month<1||month>12||day<1||day>31||hour<1||hour>12||minute>59)throw Error("Invalid SFRT date or time");
+ const local=year+"-"+String(month).padStart(2,"0")+"-"+String(day).padStart(2,"0");
+ if(new Date(local+"T12:00:00Z").toISOString().slice(0,10)!==local)throw Error("Invalid date "+date);
+ const h=hour%12+(t[3]==="P"?12:0);
+ const wanted=local+" "+String(h).padStart(2,"0")+":"+String(minute).padStart(2,"0");
+ const formatter=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
+ const parts=ms=>{const p=Object.fromEntries(formatter.formatToParts(new Date(ms)).map(x=>[x.type,x.value]));return p.year+"-"+p.month+"-"+p.day+" "+p.hour+":"+p.minute};
+ const guess=Date.UTC(year,month-1,day,h,minute);
+ for(const offset of [4,5]){const ms=guess+offset*3600000;if(parts(ms)===wanted)return new Date(ms).toISOString()}
+ throw Error("Invalid or nonexistent Boston time: "+wanted);
+}
+function sfrtAddress(raw,city){
+ const parts=String(raw||"").split(",").map(v=>v.trim()).filter(Boolean);
+ const zip=parts.find(v=>/^\d{5}(?:-\d{4})?$/.test(v));
+ const street=parts.filter(v=>v!==zip).join(" ").trim();
+ if(!street||!String(city||"").trim())throw Error("Missing street or city");
+ return street+", "+String(city).trim()+", MA"+(zip?" "+zip:"");
+}
+function parseSfrtCsv(text){
+ const rows=csvRows(text.replace(/^\uFEFF/,""));
+ const headerAt=rows.findIndex(row=>row.some(v=>v.trim().toLowerCase()==="client name")&&row.some(v=>v.trim().toLowerCase()==="trip num"));
+ if(headerAt<0)throw Error("SFRT header not found (Client Name / Trip Num)");
+ const columns=rows[headerAt].map(v=>v.trim().toLowerCase().replace(/\s+/g," "));
+ const index=(name,occurrence=0)=>{let seen=0;for(let i=0;i<columns.length;i++)if(columns[i]===name){if(seen++===occurrence)return i}throw Error("Missing CSV column: "+name)};
+ const cols={name:index("client name"),phone:index("phone"),date:index("date"),pickup:index("p/u"),appt:index("appt"),pickupAddress:index("p/u address/entrance"),pickupCity:index("p/u",1),dropAddress:index("drop"),dropCity:index("drop",1),miles:index("miles"),fare:index("fare"),escort:index("escort"),trip:index("trip num"),comments:index("comments")};
+ const rides=[],errors=[],seen=new Set();
+ for(let i=headerAt+1;i<rows.length;i++){
+  const row=rows[i];if(!row.some(v=>v.trim())||row[cols.date]?.trim().toLowerCase()==="time")continue;
+  try{
+   const val=k=>String(row[cols[k]]||"").trim();
+   if(!val("trip"))throw Error("Missing Trip Num");
+   if(seen.has(val("trip")))throw Error("Duplicate Trip Num in file");
+   seen.add(val("trip"));
+   const fare=Number(val("fare")),miles=Number(val("miles")),escort=Number(val("escort")||0);
+   if(!Number.isFinite(fare)||fare<0||!Number.isFinite(miles)||miles<0||!Number.isInteger(escort)||escort<0||escort>20)throw Error("Invalid fare, miles or escort");
+   const notes=[escort>0?escort+" escort(s) accompanying passenger":null,val("comments")||null,"Distance: "+miles+" miles"].filter(Boolean).join("\n");
+   rides.push({trip_num:val("trip"),passenger_name:val("name"),passenger_phone:val("phone"),pickup_at:sfrtTime(val("date"),val("pickup")),dropoff_at:val("appt").toUpperCase()==="0000A"||!val("appt")?null:sfrtTime(val("date"),val("appt")),pickup_address:sfrtAddress(val("pickupAddress"),val("pickupCity")),dropoff_address:sfrtAddress(val("dropAddress"),val("dropCity")),price_cents:Math.round(fare*100),miles,notes});
+  }catch(error){errors.push("CSV line "+(i+1)+": "+error.message)}
+ }
+ if(errors.length)throw Error(errors.slice(0,6).join("; ")+(errors.length>6?"; plus "+(errors.length-6)+" more errors":""));
+ if(!rides.length)throw Error("No rides found");
+ return rides;
+}
+$("import-csv-toggle").addEventListener("click",()=>{$("import-csv-panel").classList.toggle("hidden")});
+$("import-csv-cancel").addEventListener("click",()=>{$("import-csv-panel").classList.add("hidden")});
+$("import-csv-file").addEventListener("change",async()=>{
+ pendingSfrtRides=[];$("import-csv-submit").disabled=true;$("import-csv-preview").textContent="";$("import-csv-notice").textContent="";
+ try{
+  const file=$("import-csv-file").files[0];if(!file)return;
+  if(file.size>2*1024*1024)throw Error("CSV file is too large (maximum 2 MB)");
+  pendingSfrtRides=parseSfrtCsv(await file.text());
+  const total=pendingSfrtRides.reduce((sum,r)=>sum+r.price_cents,0);
+  $("import-csv-preview").textContent=pendingSfrtRides.length+" rides ready · $"+(total/100).toFixed(2)+" total fare · Confirmed · Unassigned. Review the file before import.";
+  $("import-csv-submit").disabled=false;
+ }catch(error){$("import-csv-notice").textContent=error.message}
+});
+$("import-csv-submit").addEventListener("click",async()=>{
+ if(!pendingSfrtRides.length||!confirm("Import "+pendingSfrtRides.length+" SFRT rides as Confirmed?"))return;
+ const button=$("import-csv-submit");button.disabled=true;
+ const notice=$("import-csv-notice");notice.textContent="Importing...";
+ try{
+  if(dispatchHasPendingChanges())throw Error("Save existing dispatch edits before importing.");
+  const result=await employeeAdminRequest({action:"import_sfrt_csv",rides:pendingSfrtRides});
+  notice.textContent=result.created+" created, "+result.skipped+" already imported.";
+  pendingSfrtRides=[];await load();
+ }catch(error){notice.textContent=error.message+(error.created!==undefined?" · "+error.created+" created":"")+". Reopen the file to review or retry; existing trip numbers are skipped."}
+ finally{button.disabled=false}
+});
+
 $("create-ride-form").addEventListener("submit",async event=>{
  event.preventDefault();
  const submit=$("create-ride-submit"),notice=$("create-ride-notice");
