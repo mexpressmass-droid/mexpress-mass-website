@@ -409,7 +409,10 @@ try{
 const versions=await api("/rest/v1/trips?select=id,updated_at&limit=5000");
 const versionById=new Map(versions.map(t=>[t.id,t.updated_at]));
 for(const t of activeTrips)t.updated_at=versionById.get(t.id)||t.updated_at||null;
-const inferredRoundTrips=inferredRoundTripIds(activeTrips);const trips=activeTrips.filter(visibleTrip).sort(compareDispatchRides).slice(0,200);const body=$("trips");body.replaceChildren();visibleTripIds=trips.map(t=>t.id);visibleTripStatuses=new Map(trips.map(t=>[t.id,t.status]));for(const id of [...selectedTripIds])if(!visibleTripIds.includes(id))selectedTripIds.delete(id);const renderRideRow=(trip)=>{const row=el("tr");row.className=tripColor(trip.status);if(["pending","confirmed","assigned","on_the_way"].includes(trip.status)&&Date.parse(trip.pickup_at)<Date.now()){row.classList.add("overdue-ride");row.title="Pickup time has passed and ride is not yet boarded or completed";}if((trip.internal_notes||"").trim())row.classList.add("has-internal-comments");else if(trip.status==="cancelled")row.classList.add("cancelled-no-internal-comments");const check=el("input");check.type="checkbox";check.className="trip-select";check.value=trip.id;check.checked=selectedTripIds.has(trip.id);check.setAttribute("aria-label","Select ride for "+trip.passenger_name);check.addEventListener("pointerdown",event=>event.stopPropagation());check.addEventListener("click",event=>event.stopPropagation());check.addEventListener("change",event=>{event.stopPropagation();if(check.checked)selectedTripIds.add(trip.id);else selectedTripIds.delete(trip.id);updateSelection()});td(row,check);
+// A refresh may have started before the user began editing another ride.
+ // Never replace the board with a stale response while local drafts exist.
+ if(silent&&dispatchHasUnsavedEdits())return;
+ const inferredRoundTrips=inferredRoundTripIds(activeTrips);const trips=activeTrips.filter(visibleTrip).sort(compareDispatchRides).slice(0,200);const body=$("trips");body.replaceChildren();visibleTripIds=trips.map(t=>t.id);visibleTripStatuses=new Map(trips.map(t=>[t.id,t.status]));for(const id of [...selectedTripIds])if(!visibleTripIds.includes(id))selectedTripIds.delete(id);const renderRideRow=(trip)=>{const row=el("tr");row.className=tripColor(trip.status);if(["pending","confirmed","assigned","on_the_way"].includes(trip.status)&&Date.parse(trip.pickup_at)<Date.now()){row.classList.add("overdue-ride");row.title="Pickup time has passed and ride is not yet boarded or completed";}if((trip.internal_notes||"").trim())row.classList.add("has-internal-comments");else if(trip.status==="cancelled")row.classList.add("cancelled-no-internal-comments");const check=el("input");check.type="checkbox";check.className="trip-select";check.value=trip.id;check.checked=selectedTripIds.has(trip.id);check.setAttribute("aria-label","Select ride for "+trip.passenger_name);check.addEventListener("pointerdown",event=>event.stopPropagation());check.addEventListener("click",event=>event.stopPropagation());check.addEventListener("change",event=>{event.stopPropagation();if(check.checked)selectedTripIds.add(trip.id);else selectedTripIds.delete(trip.id);updateSelection()});td(row,check);
 // Editing a field must not change bulk selection. Select rides only via checkbox
 // or by tapping/clicking the non-interactive area of a ride card/row.
 row.addEventListener("click",event=>{
@@ -570,6 +573,7 @@ const save=el("button","Save");save.addEventListener("click",async()=>{
  if(!latest)throw Error("Ride saved, but the refreshed record is unavailable. Use Refresh to update the board.");
  const versions=await api("/rest/v1/trips?select=id,updated_at&id=eq."+encodeURIComponent(trip.id)+"&limit=1");
  latest.updated_at=versions[0]?.updated_at||null;
+ // A stale background refresh must not replace other edited rows.
  const fresh=renderRideRow(latest);
  row.replaceWith(fresh);
  const index=activeTrips.findIndex(item=>item.id===trip.id);
