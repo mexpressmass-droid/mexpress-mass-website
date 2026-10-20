@@ -944,9 +944,11 @@ window.addEventListener("online",()=>{
 });
 refreshConnectionNotice();
 function dispatchHasPendingChanges(){
+ // Include pending editors that render outside the dispatch table.
+ if(document.querySelector(".cell-editor-overlay,.contact-action-popover"))return true;
  const panel=$("dispatch-panel");
  if(!panel||panel.classList.contains("hidden"))return false;
- if(panel.querySelector(".time-draft"))return true;
+ if(panel.querySelector(".time-draft")||document.querySelector(".time-editor:not(.hidden)"))return true;
  for(const field of $("trips").querySelectorAll("input,textarea,select")){
   if(["checkbox","button","hidden"].includes(field.type))continue;
   if(field.dataset.loadedValue!==undefined&&field.value!==field.dataset.loadedValue)return true;
@@ -966,7 +968,7 @@ function dispatchHasUnsavedEdits(){
  if(!panel||panel.classList.contains("hidden"))return true;
  const focused=document.activeElement;
  if(focused&&panel.contains(focused)&&focused.matches("input,textarea,select,[contenteditable]"))return true;
- if(panel.querySelector(".cell-editor-overlay:not(.hidden),.time-editor:not(.hidden),.time-draft"))return true;
+ if(panel.querySelector(".time-draft")||document.querySelector(".cell-editor-overlay,.contact-action-popover,.time-editor:not(.hidden)"))return true;
  // Do not discard any unsaved row edits while auto-refreshing.
  for(const row of $("trips").querySelectorAll("tr")){
   for(const field of row.querySelectorAll("input,textarea,select")){
