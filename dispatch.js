@@ -785,10 +785,11 @@ async function employeeAdminRequest(payload){
   let data;try{data=await r.json()}catch{throw Error("Invalid server response ("+r.status+")")}
   return {r,data};
  }
- let result=await send();
+ let result;
+ try{result=await send()}catch(error){refreshConnectionNotice();throw Error("Connection failed. Check your internet and retry. No success was confirmed.")}
  if(result.r.status===401){
   try{await refreshSession()}catch{throw Error("Session expired. Please sign out and sign in again.")}
-  result=await send();
+  try{result=await send()}catch(error){refreshConnectionNotice();throw Error("Connection failed after session refresh. Check your connection before retrying.")}
  }
  if(!result.r.ok){
   const error=new Error(result.data.error||"Request failed ("+result.r.status+")");
