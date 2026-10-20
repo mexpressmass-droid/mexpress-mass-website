@@ -346,12 +346,12 @@ async function employeeAdmin(request,env){
    const rides=body.rides;
    if(!Array.isArray(rides)||rides.length<1||rides.length>200)return reply({error:"Import must contain 1–200 rides"},400);
    const validId=v=>typeof v==="string"&&/^[A-Za-z0-9_-]{3,64}$/.test(v);
-   const required=["passenger_name","passenger_phone","pickup_address","dropoff_address","pickup_at"];
+   const required=["passenger_name","pickup_address","dropoff_address","pickup_at"];
    const seen=new Set();
    for(const ride of rides){
     if(!ride||typeof ride!=="object"||!validId(ride.trip_num)||seen.has(ride.trip_num))return reply({error:"Missing or duplicate SFRT Trip Num"},400);
     seen.add(ride.trip_num);
-    if(required.some(k=>typeof ride[k]!=="string"||!ride[k].trim()||ride[k].length>500)||!Number.isFinite(Date.parse(ride.pickup_at)))return reply({error:"Invalid passenger, address or pickup time for "+ride.trip_num},400);
+    if(required.some(k=>typeof ride[k]!=="string"||!ride[k].trim()||ride[k].length>500)||typeof ride.passenger_phone!=="string"||ride.passenger_phone.length>500||!Number.isFinite(Date.parse(ride.pickup_at)))return reply({error:"Invalid passenger, address or pickup time for "+ride.trip_num},400);
     if(ride.dropoff_at!==null&&ride.dropoff_at!==undefined&&!Number.isFinite(Date.parse(ride.dropoff_at)))return reply({error:"Invalid appointment time for "+ride.trip_num},400);
     if(!Number.isSafeInteger(ride.price_cents)||ride.price_cents<0||ride.price_cents>10000000)return reply({error:"Invalid fare for "+ride.trip_num},400);
     if(typeof ride.miles!=="number"||!Number.isFinite(ride.miles)||ride.miles<0||ride.miles>10000)return reply({error:"Invalid miles for "+ride.trip_num},400);
