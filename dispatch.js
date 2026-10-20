@@ -419,9 +419,9 @@ $("import-csv-submit").addEventListener("click",async()=>{
  try{
   if(dispatchHasPendingChanges())throw Error("Save existing dispatch edits before importing.");
   const result=await employeeAdminRequest({action:"import_sfrt_csv",rides:pendingSfrtRides});
-  notice.textContent=result.created+" created, "+result.skipped+" already imported. Refreshing dispatch...";
+  const failureDetails=(result.failed||[]).map(f=>f.trip_num+": "+f.error).join(" | ");
   pendingSfrtRides=[];await load();
-  notice.textContent=result.created+" created, "+result.skipped+" already imported. Imported rides are now included in the Dispatch list; select All dates to see them.";
+  notice.textContent=result.created+" created, "+result.skipped+" already imported, "+(result.failed||[]).length+" failed."+(failureDetails?" Errors: "+failureDetails:"")+" Check imported rides before retrying.";
  }catch(error){notice.textContent=error.message+(error.importResult?.created!==undefined?" · "+error.importResult.created+" created, "+error.importResult.skipped+" skipped.":"")+". Retry the same file after checking the error; existing trip numbers are skipped.";if(error.importResult?.created)await load()}
  finally{button.disabled=false}
 });
