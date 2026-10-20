@@ -560,6 +560,8 @@ const save=el("button","Save");save.addEventListener("click",async()=>{
   }else await permanentlyDeleteRides(ids,async()=>{selectedTripIds.delete(trip.id);await load();msg("Ride permanently deleted.")});
   return;
  }
+ const otherDirtyRows=[...$("trips").querySelectorAll("tr")].filter(other=>other!==row&&(other.querySelector(".time-draft")||[...other.querySelectorAll("input,textarea,select")].some(field=>!["checkbox","button","hidden"].includes(field.type)&&field.dataset.loadedValue!==undefined&&field.value!==field.dataset.loadedValue)));
+ if(otherDirtyRows.length){msg("Save this ride after saving or discarding edits in the other "+otherDirtyRows.length+" ride(s). This prevents losing their changes when the list refreshes.",true);return}
  if(!confirm("Confirm changes to this ride?"))return;
  save.disabled=true;try{const cents=price.value.trim()===""?null:Math.round(Number(price.value)*100);if(cents!==null&&(!Number.isSafeInteger(cents)||cents<0))throw Error("Invalid price");await employeeAdminRequest({action:"update_ride",ride_id:trip.id,expected_updated_at:trip.updated_at,status:status.value,price_cents:cents,assigned_driver_id:driver.value||null,pickup_at:timeLocked?trip.pickup_at:changedBostonTime(trip.pickup_at,puEdit.value),dropoff_at:timeLocked?trip.dropoff_at:(dropEdit.value?(trip.dropoff_at?changedBostonTime(trip.dropoff_at,dropEdit.value):changedBostonTime(trip.pickup_at,dropEdit.value)):null),pickup_address:pickupInput.value,dropoff_address:dropoffInput.value,notes:driverComment.value.trim()||null,internal_notes:internal.value.trim()||null});await load();msg("Ride updated.")}catch(err){if(/changed by another user|version information is missing|archived\. Restore/i.test(err.message)){let details="";
  try{
