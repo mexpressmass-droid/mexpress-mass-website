@@ -377,7 +377,7 @@ function parseSfrtCsv(text){
  const cols={name:index("client name"),phone:index("phone"),date:index("date"),pickup:index("p/u"),appt:index("appt"),pickupAddress:index("p/u address/entrance"),pickupCity:index("p/u",1),dropAddress:index("drop"),dropCity:index("drop",1),miles:index("miles"),fare:index("fare"),escort:index("escort"),trip:index("trip num"),comments:index("comments")};
  const rides=[],errors=[],seen=new Set();
  for(let i=headerAt+1;i<rows.length;i++){
-  const row=rows[i];if(!row.some(v=>v.trim())||row[cols.date]?.trim().toLowerCase()==="time")continue;
+  const row=rows[i];if(!row.some(v=>v.trim())||!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(String(row[cols.date]||"").trim()))continue;
   try{
    const val=k=>String(row[cols[k]]||"").trim();
    if(!val("trip"))throw Error("Missing Trip Num");
