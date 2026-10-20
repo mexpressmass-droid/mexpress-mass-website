@@ -888,9 +888,11 @@ async function loadEmployeeAudit(){
     if(field==="pickup_at")return new Date(value).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"medium",timeStyle:"short"});
     return String(value);
    };
-   const meaningful=["ride_changed","update_ride","update_ride_contact","bulk_update_status","create_ride","create_driver","create_dispatcher","change_username","reset_password","delete_employee"].includes(e.action);
+   const meaningful=["ride_changed","update_ride","update_ride_contact","bulk_update_status","bulk_assign_driver","create_ride","create_driver","create_dispatcher","change_username","reset_password","delete_employee"].includes(e.action);
    if(!meaningful)continue;
    const lines=Object.entries(changes).map(([field,values])=>(labels[field]||field)+": "+show(field,values.before??values.old)+" → "+show(field,values.after??values.new));
+   if(!lines.length&&e.action==="bulk_update_status"&&e.details?.status)lines.push("New status: "+e.details.status);
+   if(!lines.length&&e.action==="bulk_assign_driver"&&e.details?.driver_id)lines.push("Assigned driver: "+show("assigned_driver_id",e.details.driver_id));
    if(!lines.length&&e.action==="ride_changed"){
     for(const [field,label] of [["status","Status"],["driver","Assigned driver"],["pickup","Pickup time"]]){
      const old=e.details?.["previous_"+field],next=e.details?.[field];
@@ -900,7 +902,7 @@ async function loadEmployeeAudit(){
    const known=allDriverProfiles.find(d=>d.id===e.actor_id);const whoName=who?who.textContent:known?.display_name||known?.username||e.actor_id.slice(0,8);
    const item=el("div");item.style.padding="12px 0";item.style.borderBottom="1px solid #ddd";
    item.append(el("strong",localDay+" "+clock+" · "+whoName+" · "+e.actor_role));
-   const eventTitle={ride_changed:changes.status?"Ride status changed":"Ride updated",update_ride:changes.status?"Ride status changed":"Ride updated",update_ride_contact:"Ride contact updated",bulk_update_status:"Multiple ride statuses updated",create_ride:"Ride created",create_driver:"Driver account created",create_dispatcher:"Dispatcher account created",change_username:"Username changed",reset_password:"Password reset",delete_employee:"Employee deleted"}[e.action]||e.action;
+   const eventTitle={ride_changed:changes.status?"Ride status changed":"Ride updated",update_ride:changes.status?"Ride status changed":"Ride updated",update_ride_contact:"Ride contact updated",bulk_update_status:"Ride status updated (bulk)",bulk_assign_driver:"Driver assigned (bulk)",create_ride:"Ride created",create_driver:"Driver account created",create_dispatcher:"Dispatcher account created",change_username:"Username changed",reset_password:"Password reset",delete_employee:"Employee deleted"}[e.action]||e.action;
    item.append(el("div",eventTitle+(e.details?.ride_id?" · Ride "+String(e.details.ride_id).slice(0,8):"")));
    for(const line of lines)item.append(el("div",line));
    item.append(el("small","Source: "+(e.details?.source||"Web / database")));
