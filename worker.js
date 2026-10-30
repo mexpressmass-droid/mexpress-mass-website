@@ -20,9 +20,9 @@ export default {
   let check;try{const r=await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify",{method:"POST",body:challenge});check=await r.json()}catch{return response({error:"Security verification unavailable"},502)}
   if(!check.success||check.hostname!==url.hostname)return response({error:"Security verification failed"},403);
   const safe=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  // No diagnosis, wheelchair details, notes or pickup/drop-off addresses in regular email.
-  const rows=[["Passenger",data.passenger_name],["Phone",data.passenger_phone],["Email",data.passenger_email],["Date",data.ride_date],["Time (Boston)",data.pickup_time],["Trip type",data.trip_type]];
-  const html="<h2>New M Express booking request</h2><p>Contact the passenger to confirm addresses and other details.</p><table>"+rows.map(([k,v])=>"<tr><th align='left'>"+safe(k)+"</th><td>"+safe(v)+"</td></tr>").join("")+"</table>";
+  // Include booking addresses, but no diagnoses, wheelchair details or free-text medical notes in regular email.
+  const rows=[["Passenger",data.passenger_name],["Phone",data.passenger_phone],["Email",data.passenger_email],["Pickup address",data.pickup_address],["Drop-off address",data.dropoff_address],["Date",data.ride_date],["Time (Boston)",data.pickup_time],["Trip type",data.trip_type]];
+  const html="<h2>New M Express booking request</h2><table>"+rows.map(([k,v])=>"<tr><th align='left'>"+safe(k)+"</th><td>"+safe(v)+"</td></tr>").join("")+"</table>";
   let sent;try{sent=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from:env.BOOKING_NOTIFICATION_FROM,to:["mexpress.mass@gmail.com"],subject:"New M Express ride request",html})})}catch{return response({error:"Email service unavailable"},502)}
   if(!sent.ok)return response({error:"Email service rejected request"},502);
   return response({ok:true},200);
