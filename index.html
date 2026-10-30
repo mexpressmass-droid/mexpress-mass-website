@@ -59,10 +59,8 @@
           <p>Fill out the pickup, drop-off, date, time, and passenger details. Address fields include smart suggestions, and the request will be sent to M Express by email for confirmation.</p>
           <div class="mini-note">For urgent or same-day rides, please call <a href="tel:+16172517049">617-251-7049</a>.</div>
         </div>
-        <form class="ride-form" action="https://formsubmit.co/mexpress.mass@gmail.com" method="POST">
-          <input type="hidden" name="_subject" value="New ride request from M Express website">
-          <input type="hidden" name="_captcha" value="false">
-          <input type="hidden" name="_template" value="table">
+        <form class="ride-form" action="/api/ride-request" method="POST">
+          <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-10000px" />
           <div class="form-grid">
             <label>Passenger name
               <input type="text" name="Passenger name" placeholder="Full name" required>
@@ -106,7 +104,11 @@
           <datalist id="address-suggestions">
             <option value="Boston, MA 02108"></option><option value="Boston, MA 02116"></option><option value="Cambridge, MA 02139"></option><option value="Somerville, MA 02143"></option><option value="Brookline, MA 02445"></option><option value="Newton, MA 02458"></option><option value="Watertown, MA 02472"></option><option value="Waltham, MA 02453"></option><option value="Quincy, MA 02169"></option><option value="Woburn, MA 01801"></option><option value="Burlington, MA 01803"></option><option value="Lexington, MA 02420"></option><option value="Lowell, MA 01852"></option>
           </datalist>
-          <button class="btn primary form-submit" type="submit">Send ride request</button>
+          <div class="cf-turnstile" data-sitekey="0x4AAAAAAFUCFxbCTxHC9fPv"></div>
+          <p class="booking-feedback" role="status" aria-live="polite"></p>
+          <div class="cf-turnstile" data-sitekey="0x4AAAAAAFUCFxbCTxHC9fPv"></div>
+        <p class="booking-feedback" role="status" aria-live="polite"></p>
+        <button class="btn primary form-submit" type="submit">Send ride request</button>
           <p class="form-disclaimer">This form sends a booking request, not an automatic confirmation. We will confirm the ride by phone or email.</p>
         </form>
       </div>
@@ -207,10 +209,8 @@
       <p class="eyebrow">Book a ride</p>
       <h2 id="modal-title">Request transportation</h2>
       <p class="modal-intro">Enter pickup, drop-off, date, time, and passenger details. We will confirm availability by phone or email.</p>
-      <form class="ride-form modal-form" action="https://formsubmit.co/mexpress.mass@gmail.com" method="POST">
-        <input type="hidden" name="_subject" value="New ride request from M Express website">
-        <input type="hidden" name="_captcha" value="false">
-        <input type="hidden" name="_template" value="table">
+      <form class="ride-form modal-form" action="/api/ride-request" method="POST">
+        <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-10000px" />
         <div class="form-grid">
           <label>Passenger name<input type="text" name="Passenger name" placeholder="Full name" required></label>
           <label>Phone number<input type="tel" name="Phone" placeholder="(617) 000-0000" required></label>
@@ -223,12 +223,15 @@
           <label>Trip type<select name="Trip type"><option>One-way</option><option>Round trip</option><option>Wait and return</option></select></label>
           <label class="wide">Notes<textarea name="Notes" rows="4" placeholder="Appointment time, entrance, wheelchair details, return trip, special instructions"></textarea></label>
         </div>
+        <div class="cf-turnstile" data-sitekey="0x4AAAAAAFUCFxbCTxHC9fPv"></div>
+        <p class="booking-feedback" role="status" aria-live="polite"></p>
         <button class="btn primary form-submit" type="submit">Send ride request</button>
         <p class="form-disclaimer">This is a request only. We will confirm the ride by phone or email.</p>
       </form>
     </div>
   </div>
   <a class="mobile-call" href="tel:+16172517049">Call Now</a>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <script src="script.js"></script>
 </body>
 </html>
