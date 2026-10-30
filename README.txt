@@ -8,3 +8,4 @@ Upload/replace in GitHub:
 
 Important:
 Upload the full assets folder with all images.
+Production Worker deployment update — October 29, 2026
