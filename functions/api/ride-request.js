@@ -3,7 +3,7 @@
 // Keep the service role key out of browser code and GitHub.
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{"Content-Type":"application/json","Cache-Control":"no-store"}});
 export async function onRequestPost({request,env}){
-  if(!env.SUPABASE_URL||!env.SUPABASE_SERVICE_ROLE_KEY||!env.TURNSTILE_SECRET_KEY) return json({error:"Booking service is not configured"},503);
+  if(!env.RESEND_API_KEY||!env.BOOKING_NOTIFICATION_FROM||!env.TURNSTILE_SECRET_KEY) return json({error:"Booking service is not configured"},503);
   const origin=request.headers.get("Origin");
   const allowed=new URL(request.url).origin;
   if(origin&&origin!==allowed) return json({error:"Origin not allowed"},403);
@@ -43,20 +43,14 @@ export async function onRequestPost({request,env}){
   if(matches.length!==1) return json({error:"Pickup time is invalid or ambiguous due to daylight saving time. Please contact dispatch."},400);
   const pickupAt=new Date(matches[0]).toISOString();
   const tripTypes={ "One-way":"one_way","Round trip":"round_trip","Wait and return":"wait_and_return"};
-  const record={passenger_name:input.passenger_name.trim(),passenger_phone:input.passenger_phone.trim(),passenger_email:input.passenger_email?.trim()||null,pickup_address:input.pickup_address.trim(),dropoff_address:input.dropoff_address.trim(),pickup_at:pickupAt,wheelchair_required:input.wheelchair==="Yes",trip_type:tripTypes[input.trip_type]||"one_way",notes:input.notes?.trim()||null,status:"pending",source:"website"};
-  const endpoint=env.SUPABASE_URL.replace(/\/$/,"")+"/rest/v1/trips";
+  // Email-first staging: no Supabase dependency. Avoid including medical notes or addresses in ordinary email.
+  const safe=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const details=[["Passenger",input.passenger_name],["Phone",input.passenger_phone],["Email",input.passenger_email],["Requested pickup (Boston time)",input.ride_date+" "+input.pickup_time],["Trip type",input.trip_type]];
+  const html="<h2>New M Express ride request</h2><p>Contact the passenger to confirm pickup/drop-off details. Do not reply with medical details.</p><table>"+details.map(([k,v])=>"<tr><th align='left'>"+safe(k)+"</th><td>"+safe(v)+"</td></tr>").join("")+"</table>";
   let response;
-  try {response=await fetch(endpoint,{method:"POST",headers:{"apikey":env.SUPABASE_SERVICE_ROLE_KEY,"Authorization":"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY,"Content-Type":"application/json","Prefer":"return=minimal"},body:JSON.stringify(record)})} catch {return json({error:"Booking service unavailable"},502)}
-  if(!response.ok) return json({error:"Unable to save request"},502);
-  // A successful database write is authoritative: notification failures must not cause duplicate submissions.
-  // Configure RESEND_API_KEY and BOOKING_NOTIFICATION_FROM as Cloudflare secrets/variables after verifying the sending domain.
-  if(env.RESEND_API_KEY && env.BOOKING_NOTIFICATION_FROM){
-    // Do not send passenger details or potentially sensitive medical notes through ordinary email.
-    const html="<p>A new ride request has been saved in M Express Dispatch.</p><p>Sign in to review and confirm it.</p>";
-    try {
-      const notify=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from:env.BOOKING_NOTIFICATION_FROM,to:["mexpress.mass@gmail.com"],subject:"New M Express ride request",html})});
-      if(!notify.ok) console.error("Booking saved but email notification failed",notify.status);
-    } catch {console.error("Booking saved but email notification unavailable")}
-  }
-  return json({ok:true},201);
+  try {
+    response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from:env.BOOKING_NOTIFICATION_FROM,to:["mexpress.mass@gmail.com"],subject:"New M Express ride request",html})});
+  } catch {return json({error:"Email service unavailable"},502)}
+  if(!response.ok) return json({error:"Unable to email request"},502);
+  return json({ok:true},200);
 }
