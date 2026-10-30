@@ -51,9 +51,8 @@ export async function onRequestPost({request,env}){
   // A successful database write is authoritative: notification failures must not cause duplicate submissions.
   // Configure RESEND_API_KEY and BOOKING_NOTIFICATION_FROM as Cloudflare secrets/variables after verifying the sending domain.
   if(env.RESEND_API_KEY && env.BOOKING_NOTIFICATION_FROM){
-    const escapeHtml=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-    const fields=[["Passenger",record.passenger_name],["Phone",record.passenger_phone],["Email",record.passenger_email],["Pickup",record.pickup_address],["Drop-off",record.dropoff_address],["Pickup time (UTC)",record.pickup_at],["Wheelchair",input.wheelchair],["Trip type",input.trip_type],["Notes",record.notes]];
-    const html="<h2>New M Express booking request</h2><table>"+fields.map(([label,value])=>"<tr><th align='left'>"+escapeHtml(label)+"</th><td>"+escapeHtml(value)+"</td></tr>").join("")+"</table>";
+    // Do not send passenger details or potentially sensitive medical notes through ordinary email.
+    const html="<p>A new ride request has been saved in M Express Dispatch.</p><p>Sign in to review and confirm it.</p>";
     try {
       const notify=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from:env.BOOKING_NOTIFICATION_FROM,to:["mexpress.mass@gmail.com"],subject:"New M Express ride request",html})});
       if(!notify.ok) console.error("Booking saved but email notification failed",notify.status);
