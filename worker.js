@@ -5,7 +5,7 @@ export default {
   const url=new URL(request.url);
   if(url.pathname!=="/api/ride-request")return env.ASSETS.fetch(request);
   if(request.method!=="POST")return response({error:"Method not allowed"},405);
-  if(!env.RESEND_API_KEY||!env.BOOKING_NOTIFICATION_FROM||!env.TURNSTILE_SECRET_KEY)return response({error:"Booking email is not configured"},503);
+  if(!env.RESEND_API_KEY||!env.BOOKING_NOTIFICATION_FROM||!env.TURNSTILE_SECRET_KEY)return response({error:"Booking email is not configured",missing:["RESEND_API_KEY","BOOKING_NOTIFICATION_FROM","TURNSTILE_SECRET_KEY"].filter(key=>!env[key])},503);
   if(request.headers.get("Origin")!==url.origin)return response({error:"Invalid origin"},403);
   if(!(request.headers.get("content-type")||"").includes("application/json"))return response({error:"JSON required"},415);
   if(Number(request.headers.get("content-length")||0)>12000)return response({error:"Request too large"},413);
