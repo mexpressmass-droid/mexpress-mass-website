@@ -264,7 +264,7 @@ $("archive-driver-export").addEventListener("click",()=>{
  if(!lastArchiveReport.length){$("archive-notice").textContent="No rides match these filters.";return}
  const totals=new Map();
  for(const ride of lastArchiveReport){
-  if(!ride.assigned_driver_id)continue;
+  if(!ride.assigned_driver_id||!["completed","cancelled"].includes(ride.status))continue;
   const id=ride.assigned_driver_id;
   if(!totals.has(id)){
    const profile=allDriverProfiles.find(p=>p.id===id);
