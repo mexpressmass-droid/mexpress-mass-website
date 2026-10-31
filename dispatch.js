@@ -1080,7 +1080,13 @@ async function loadEmployeeAudit(){
    };
    const meaningful=["ride_changed","update_ride","update_ride_contact","bulk_update_status","bulk_assign_driver","import_sfrt_csv","create_ride","create_driver","create_dispatcher","change_username","reset_password","delete_employee"].includes(e.action);
    if(!meaningful)continue;
-   const lines=Object.entries(changes).map(([field,values])=>(labels[field]||field)+": "+show(field,values.before??values.old)+" → "+show(field,values.after??values.new));
+   const lines=Object.entries(changes).map(([field,values])=>{
+    const label=labels[field]||field;
+    if(values===null||typeof values!=="object"||Array.isArray(values))return label+": "+show(field,values);
+    const before=Object.prototype.hasOwnProperty.call(values,"before")?values.before:values.old;
+    const after=Object.prototype.hasOwnProperty.call(values,"after")?values.after:values.new;
+    return label+": "+show(field,before)+" → "+show(field,after);
+   });
    if(!lines.length&&e.action==="bulk_update_status"&&e.details?.status)lines.push("New status: "+e.details.status);
    if(!lines.length&&e.action==="bulk_assign_driver"&&e.details?.driver_id)lines.push("Assigned driver: "+show("assigned_driver_id",e.details.driver_id));
    if(!lines.length&&e.action==="ride_changed"){
