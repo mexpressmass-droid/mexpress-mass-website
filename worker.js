@@ -83,9 +83,17 @@ async function employeeAdmin(request,env){
    return reply({success:true});
   }
   if(body.action==="archive_list"){
-   const res=await fetch(SUPABASE+"/rest/v1/trips?select=id,passenger_name,pickup_at,pickup_address,dropoff_address,status,assigned_driver_id,price_cents,archived_at,archive_source&archived_at=not.is.null&order=pickup_at.desc&limit=1000",{headers:serviceHeaders});
-   if(!res.ok)return reply({error:"Unable to load archive"},502);
-   return reply({rides:await res.json()});
+   // Page through Supabase REST results so monthly reports never silently omit older rides.
+   const rides=[];
+   for(let offset=0;offset<20000;offset+=500){
+    const url=SUPABASE+"/rest/v1/trips?select=id,passenger_name,passenger_phone,pickup_at,pickup_address,dropoff_address,status,assigned_driver_id,price_cents,archived_at,archive_source&archived_at=not.is.null&order=pickup_at.desc,id.desc&limit=500&offset="+offset;
+    const res=await fetch(url,{headers:serviceHeaders});
+    if(!res.ok)return reply({error:"Unable to load complete archive"},502);
+    const batch=await res.json();
+    rides.push(...batch);
+    if(batch.length<500)return reply({rides});
+   }
+   return reply({error:"Archive exceeds 20,000 rides. Contact support to export the complete archive."},413);
   }
   if(body.action==="delete_rides"){
    if(staffRole!=="admin")return reply({error:"Only administrators may permanently delete rides"},403);
