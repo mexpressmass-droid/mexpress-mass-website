@@ -592,16 +592,27 @@ async function load({silent=false}={}){if(refreshing)return;refreshing=true;if(!
 const imported=await employeeAdminRequest({action:"list_sfrt_imports"});
 const allById=new Map(rpcTrips.map(t=>[t.id,t]));
 for(const trip of imported.rides||[])allById.set(trip.id,{...allById.get(trip.id),...trip});
-const activeTrips=[...allById.values()].filter(t=>!archivedIds.has(t.id));// Load drop-off times separately: older dispatch_get_trips RPC versions do not expose this new column.
-try{
- const extra=await api("/rest/v1/trips?select=id,dropoff_at,distance_miles&limit=5000");
- const byId=new Map(extra.map(t=>[t.id,t]));
- for(const t of activeTrips)if(byId.has(t.id)){t.dropoff_at=byId.get(t.id).dropoff_at;t.distance_miles=byId.get(t.id).distance_miles;}
-}catch(error){console.warn("Drop-off times could not be loaded",error)}
-// Fetch authoritative edit versions independently of the RPC response shape.
-const versions=await api("/rest/v1/trips?select=id,updated_at&limit=5000");
-const versionById=new Map(versions.map(t=>[t.id,t.updated_at]));
-for(const t of activeTrips)t.updated_at=versionById.get(t.id)||t.updated_at||null;
+const activeTrips=[...allById.values()].filter(t=>!archivedIds.has(t.id));// Fetch only active ride metadata in bounded batches; never rely on a global 5,000-row cap.
+// Keep version information mandatory so edits cannot proceed with an unknown revision.
+async function fetchActiveTripMetadata(rides){
+ const ids=[...new Set(rides.map(t=>t.id).filter(Boolean))],result=new Map();
+ for(let i=0;i<ids.length;i+=100){
+  const batch=ids.slice(i,i+100);
+  const filter="id=in.("+batch.map(id=>'"'+String(id).replace(/\\/g,"\\\\").replace(/"/g,'\\"')+'"').join(",")+")";
+  const rows=await api("/rest/v1/trips?select=id,dropoff_at,distance_miles,updated_at&"+new URLSearchParams({and:"("+filter+")",limit:String(batch.length)}));
+  for(const row of rows)result.set(row.id,row);
+ }
+ return result;
+}
+const metadata=await fetchActiveTripMetadata(activeTrips);
+for(const t of activeTrips){
+ const record=metadata.get(t.id);
+ if(record){
+  t.dropoff_at=record.dropoff_at;
+  t.distance_miles=record.distance_miles;
+  t.updated_at=record.updated_at;
+ }else t.updated_at=null; // Missing version must block edits rather than allow blind overwrites.
+}
 // A refresh may have started before the user began editing another ride.
  // Never replace the board with a stale response while local drafts exist.
  if(silent&&dispatchHasUnsavedEdits())return;
