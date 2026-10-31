@@ -1195,7 +1195,7 @@ function dispatchHasUnsavedEdits(){
  const panel=$("dispatch-panel");
  if(!panel||panel.classList.contains("hidden"))return true;
  const focused=document.activeElement;
- if(focused&&panel.contains(focused)&&focused.matches("input,textarea,select,[contenteditable]"))return true;
+ if(focused&&$("trips").contains(focused)&&focused.matches("input,textarea,select,[contenteditable]"))return true;
  if(panel.querySelector(".time-draft")||document.querySelector(".cell-editor-overlay,.contact-action-popover,.time-editor:not(.hidden)"))return true;
  // Do not discard any unsaved row edits while auto-refreshing.
  for(const row of $("trips").querySelectorAll("tr")){
