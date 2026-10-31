@@ -245,6 +245,17 @@ function renderArchiveInsights(rides){
   group.append(el("span",String(count)),bar,el("small",month.slice(2)));chart.append(group);
  }
 }
+function archiveMonthSummary(rides){
+ const months=new Map();
+ for(const t of rides){
+  const month=bostonDate(t.pickup_at).slice(0,7);
+  if(!months.has(month))months.set(month,{month,completed:0,cancelled:0,value:0});
+  const item=months.get(month);
+  if(t.status==="completed"){item.completed++;item.value+=Number(t.price_cents)||0}
+  if(t.status==="cancelled")item.cancelled++;
+ }
+ return [...months.values()].sort((a,b)=>a.month.localeCompare(b.month));
+}
 function archiveCsvCell(value){let str=String(value??"");if(["=","+","-","@"].includes(str.trimStart().charAt(0)))str="'"+str;return '"'+str.replace(/"/g,'""')+'"'}
 $("archive-export").addEventListener("click",()=>{
  if(!lastArchiveReport.length){$("archive-notice").textContent="No rides match these filters.";return}
