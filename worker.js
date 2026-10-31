@@ -254,7 +254,7 @@ async function employeeAdmin(request,env){
    if(driverId===null&&["on_the_way","arrived","boarded"].includes(body.status))return reply({error:"Assign a driver before setting this ride in progress."},409);
    const nextStatus=driverId!==null&&["confirmed","assigned"].includes(body.status)?"assigned":body.status;
    const changes={status:nextStatus,pickup_at:pickupTime,dropoff_at:dropoffTime,pickup_address:body.pickup_address.trim(),dropoff_address:body.dropoff_address.trim(),price_cents:body.price_cents,assigned_driver_id:driverId,notes:body.notes,internal_notes:body.internal_notes,updated_at:new Date().toISOString()};
-   const saved=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id)+"&updated_at=eq."+encodeURIComponent(current.updated_at)+"&archived_at=is.null",{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(changes)});
+   const saved=await fetch(SUPABASE+"/rest/v1/trips?id=eq."+encodeURIComponent(body.ride_id)+"&updated_at=eq."+encodeURIComponent(body.expected_updated_at)+"&archived_at=is.null",{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(changes)});
    if(!saved.ok)return reply({error:"Unable to save ride changes"},502);
    const savedRows=await saved.json();
    if(savedRows.length!==1)return reply({error:"Ride changed during saving. Refresh and review before trying again."},409);

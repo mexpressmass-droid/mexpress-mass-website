@@ -588,35 +588,57 @@ function renderDriverStats(rides){
  for(const value of ["Total",total.completed,total.cancelled,(total.completed+total.cancelled?Math.round(100*total.completed/(total.completed+total.cancelled))+"%":"—"),"$"+(total.value/100).toFixed(2)])td(tr,el("strong",String(value)));
  rows.append(tr);
 }
-async function load({silent=false}={}){if(refreshing)return;refreshing=true;if(!silent)msg("Loading...");try{allDriverProfiles=await api("/rest/v1/driver_profiles?select=id,username,display_name,role,is_active&role=in.(admin,dispatcher,driver)&order=display_name.asc");drivers=allDriverProfiles.filter(d=>d.is_active===true);const scheduleDriver=$("schedule-driver"),selectedScheduleDriver=scheduleDriver.value;scheduleDriver.replaceChildren(new Option("All drivers",""),new Option("Unassigned rides","unassigned"));for(const profile of allDriverProfiles.filter(d=>d.role==="driver"))scheduleDriver.add(new Option(profile.display_name+" ("+profile.username+")"+(profile.is_active?"":" — inactive"),profile.id));scheduleDriver.value=selectedScheduleDriver;if(scheduleDriver.selectedIndex<0)scheduleDriver.value="";const bulkDriver=$("bulk-driver"),previousBulkDriver=bulkDriver.value;bulkDriver.replaceChildren();for(const [id,label] of [["","No driver change"],...drivers.filter(d=>d.role==="driver").map(d=>[d.id,d.display_name+" ("+d.username+")"])]){const opt=el("option",label);opt.value=id;bulkDriver.append(opt)}bulkDriver.value=previousBulkDriver;if(bulkDriver.selectedIndex<0)bulkDriver.value="";const archivedIds=new Set((await employeeAdminRequest({action:"archive_list"})).rides.map(t=>t.id));const rpcTrips=await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"});
+async function load({silent=false}={}){if(refreshing)return;refreshing=true;if(!silent)msg("Loading...");try{allDriverProfiles=staffRole==="dispatcher"?(await employeeAdminRequest({action:"list"})).employees:await api("/rest/v1/driver_profiles?select=id,username,display_name,role,is_active&role=in.(admin,dispatcher,driver)&order=display_name.asc");drivers=allDriverProfiles.filter(d=>d.is_active===true);const scheduleDriver=$("schedule-driver"),selectedScheduleDriver=scheduleDriver.value;scheduleDriver.replaceChildren(new Option("All drivers",""),new Option("Unassigned rides","unassigned"));for(const profile of allDriverProfiles.filter(d=>d.role==="driver"))scheduleDriver.add(new Option(profile.display_name+" ("+profile.username+")"+(profile.is_active?"":" — inactive"),profile.id));scheduleDriver.value=selectedScheduleDriver;if(scheduleDriver.selectedIndex<0)scheduleDriver.value="";const bulkDriver=$("bulk-driver"),previousBulkDriver=bulkDriver.value;bulkDriver.replaceChildren();for(const [id,label] of [["","No driver change"],...drivers.filter(d=>d.role==="driver").map(d=>[d.id,d.display_name+" ("+d.username+")"])]){const opt=el("option",label);opt.value=id;bulkDriver.append(opt)}bulkDriver.value=previousBulkDriver;if(bulkDriver.selectedIndex<0)bulkDriver.value="";const archivedIds=new Set((await employeeAdminRequest({action:"archive_list"})).rides.map(t=>t.id));const rpcTrips=[];
+// Continue to an empty page: the server may cap responses below our requested limit.
+let tripCursor=null;
+while(true){
+ const params=new URLSearchParams({order:"id.asc",limit:"500",archived_at:"is.null"});
+ if(tripCursor)params.set("id","gt."+tripCursor);
+ const page=await api("/rest/v1/rpc/dispatch_get_trips?"+params,{method:"POST",body:"{}"});
+ if(!page.length)break;
+ const next=page[page.length-1].id;
+ if(tripCursor&&next<=tripCursor)throw Error("Ride pagination did not advance");
+ rpcTrips.push(...page);tripCursor=next;
+}
 const imported=await employeeAdminRequest({action:"list_sfrt_imports"});
 const allById=new Map(rpcTrips.map(t=>[t.id,t]));
 for(const trip of imported.rides||[])allById.set(trip.id,{...allById.get(trip.id),...trip});
-const activeTrips=[...allById.values()].filter(t=>!archivedIds.has(t.id));// Fetch only active ride metadata in bounded batches; never rely on a global 5,000-row cap.
+const activeTrips=[...allById.values()].filter(t=>!t.archived_at&&!archivedIds.has(t.id));// Fetch only active ride metadata in bounded batches; never rely on a global 5,000-row cap.
 // Keep version information mandatory so edits cannot proceed with an unknown revision.
 async function fetchActiveTripMetadata(rides){
- const ids=[...new Set(rides.map(t=>t.id).filter(Boolean))],result=new Map();
+ const ids=[...new Set(rides.map(t=>t.id))],result=new Map();
+ if(ids.some(id=>typeof id!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)))throw Error("Invalid ride identifier");
  for(let i=0;i<ids.length;i+=100){
-  const batch=ids.slice(i,i+100);
-  const filter="id=in.("+batch.map(id=>'"'+String(id).replace(/\\/g,"\\\\").replace(/"/g,'\\"')+'"').join(",")+")";
-  const rows=await api("/rest/v1/trips?select=id,dropoff_at,distance_miles,updated_at&"+new URLSearchParams({and:"("+filter+")",limit:String(batch.length)}));
-  for(const row of rows)result.set(row.id,row);
+  const batch=ids.slice(i,i+100);let after=null;
+  // Read each editable record and its version in the SAME database snapshot.
+  // A newer version must never be attached to older RPC/import field values.
+  // Keyset pagination also handles a server row cap smaller than our batch.
+  while(true){
+   const params=new URLSearchParams({select:"*",id:"in.("+batch.join(",")+")",order:"id.asc",limit:String(batch.length)});
+   if(after)params.set("and","(id.gt."+after+")");
+   const rows=await api("/rest/v1/trips?"+params);
+   if(!Array.isArray(rows))throw Error("Invalid ride metadata response");
+   if(!rows.length)break;
+   for(const row of rows){
+    if(!batch.includes(row.id)||(after&&row.id<=after)||result.has(row.id))throw Error("Invalid ride metadata page");
+    result.set(row.id,row);
+   }
+   after=rows[rows.length-1].id;
+   if(batch.every(id=>result.has(id)))break;
+  }
  }
  return result;
 }
 const metadata=await fetchActiveTripMetadata(activeTrips);
 for(const t of activeTrips){
  const record=metadata.get(t.id);
- if(record){
-  t.dropoff_at=record.dropoff_at;
-  t.distance_miles=record.distance_miles;
-  t.updated_at=record.updated_at;
- }else t.updated_at=null; // Missing version must block edits rather than allow blind overwrites.
+ if(record)Object.assign(t,record);
+ else t.updated_at=null; // RLS-hidden/deleted rows cannot be saved blindly.
 }
 // A refresh may have started before the user began editing another ride.
  // Never replace the board with a stale response while local drafts exist.
  if(silent&&dispatchHasUnsavedEdits())return;
- const inferredRoundTrips=inferredRoundTripIds(activeTrips);const trips=activeTrips.filter(visibleTrip).sort(compareDispatchRides).slice(0,200);const body=$("trips");body.replaceChildren();visibleTripIds=trips.map(t=>t.id);visibleTripStatuses=new Map(trips.map(t=>[t.id,t.status]));for(const id of [...selectedTripIds])if(!visibleTripIds.includes(id))selectedTripIds.delete(id);const renderRideRow=(trip)=>{const row=el("tr");row.dataset.pickupTimestamp=String(Date.parse(trip.pickup_at));row.dataset.rideStatus=trip.status;row.className=tripColor(trip.status);if(["pending","confirmed","assigned","on_the_way"].includes(trip.status)&&Date.parse(trip.pickup_at)<Date.now()){row.classList.add("overdue-ride");row.title="Pickup time has passed and ride is not yet boarded or completed";}if((trip.internal_notes||"").trim())row.classList.add("has-internal-comments");else if(trip.status==="cancelled")row.classList.add("cancelled-no-internal-comments");const check=el("input");check.type="checkbox";check.className="trip-select";check.value=trip.id;check.checked=selectedTripIds.has(trip.id);check.setAttribute("aria-label","Select ride for "+trip.passenger_name);check.addEventListener("pointerdown",event=>event.stopPropagation());check.addEventListener("click",event=>event.stopPropagation());check.addEventListener("change",event=>{event.stopPropagation();if(check.checked)selectedTripIds.add(trip.id);else selectedTripIds.delete(trip.id);updateSelection()});td(row,check);
+ const currentTrips=activeTrips.filter(t=>!t.archived_at);const inferredRoundTrips=inferredRoundTripIds(currentTrips);const trips=currentTrips.filter(visibleTrip).sort(compareDispatchRides).slice(0,200);const body=$("trips");body.replaceChildren();visibleTripIds=trips.map(t=>t.id);visibleTripStatuses=new Map(trips.map(t=>[t.id,t.status]));for(const id of [...selectedTripIds])if(!visibleTripIds.includes(id))selectedTripIds.delete(id);const renderRideRow=(trip)=>{const row=el("tr");row.dataset.pickupTimestamp=String(Date.parse(trip.pickup_at));row.dataset.rideStatus=trip.status;row.className=tripColor(trip.status);if(["pending","confirmed","assigned","on_the_way"].includes(trip.status)&&Date.parse(trip.pickup_at)<Date.now()){row.classList.add("overdue-ride");row.title="Pickup time has passed and ride is not yet boarded or completed";}if((trip.internal_notes||"").trim())row.classList.add("has-internal-comments");else if(trip.status==="cancelled")row.classList.add("cancelled-no-internal-comments");const check=el("input");check.type="checkbox";check.className="trip-select";check.value=trip.id;check.checked=selectedTripIds.has(trip.id);check.setAttribute("aria-label","Select ride for "+trip.passenger_name);check.addEventListener("pointerdown",event=>event.stopPropagation());check.addEventListener("click",event=>event.stopPropagation());check.addEventListener("change",event=>{event.stopPropagation();if(check.checked)selectedTripIds.add(trip.id);else selectedTripIds.delete(trip.id);updateSelection()});td(row,check);
 // Editing a field must not change bulk selection. Select rides only via checkbox
 // or by tapping/clicking the non-interactive area of a ride card/row.
 row.addEventListener("click",event=>{
@@ -751,7 +773,7 @@ const statuses=["pending","confirmed","assigned","on_the_way","arrived","boarded
 }
 const status=select([...new Set([trip.status,...statuses])].map(v=>[v,v.replaceAll("_"," ")]).concat([["archive","Move to Archive"],...(staffRole==="admin"?[["delete","Delete Permanently"]]:[])]),trip.status);for(const option of status.options){if(option.value==="archive"){option.style.color="#d97706";option.style.fontWeight="700"}if(option.value==="delete"){option.style.color="#c62828";option.style.fontWeight="700"}}status.dataset.rideStatus="true";status.addEventListener("change",()=>{if(selectedTripIds.has(trip.id)&&selectedTripIds.size>=1){$("bulk-status").value=status.value;previewSelectedChanges("status",status.value)}});td(row,status);
 const price=el("input");price.type="number";price.min="0";price.step="0.01";price.value=trip.price_cents==null?"":(trip.price_cents/100).toFixed(2);price.placeholder="Not set";doubleClickField(price);const priceCell=td(row,price);if(trip.distance_miles!=null){const mileage=el("small",String(trip.distance_miles)+" mi");mileage.style.display="block";mileage.title="Planned distance from imported CSV";priceCell.append(mileage)}
-const archivedAssigned=allDriverProfiles.find(d=>d.id===trip.assigned_driver_id&&d.is_active===false);const driverOptions=[["","Unassigned"],...drivers.filter(d=>d.role==="driver").map(d=>[d.id,d.display_name+" ("+d.username+")"])];if(archivedAssigned&&staffRole==="admin")driverOptions.push([archivedAssigned.id,archivedAssigned.display_name+" (archived — historical assignment)"]);const driver=select(driverOptions,trip.assigned_driver_id||"");if(trip.status==="pending"){driver.disabled=true;driver.title="Confirm and save this ride before assigning a driver."}driver.dataset.rideDriver="true";driver.addEventListener("change",()=>{if(driver.value&&["confirmed","assigned"].includes(status.value)){status.value="assigned"}else if(!driver.value&&status.value==="assigned"){status.value="confirmed"}row.classList.remove("ride-pending","ride-confirmed","ride-assigned","ride-completed","ride-cancelled");row.classList.add(tripColor(status.value));if(selectedTripIds.has(trip.id)&&selectedTripIds.size>=1&&driver.value){$("bulk-driver").value=driver.value;previewSelectedChanges("driver",driver.value)}});if(archivedAssigned&&staffRole==="admin"){const opt=Array.from(driver.options).find(o=>o.value===archivedAssigned.id);if(opt)opt.disabled=true}td(row,driver);
+const archivedAssigned=allDriverProfiles.find(d=>d.id===trip.assigned_driver_id&&d.is_active===false);const driverOptions=[["","Unassigned"],...drivers.filter(d=>d.role==="driver").map(d=>[d.id,d.display_name+" ("+d.username+")"])];if(archivedAssigned&&staffRole==="admin")driverOptions.push([archivedAssigned.id,archivedAssigned.display_name+" (archived — historical assignment)"]);if(trip.assigned_driver_id&&!driverOptions.some(([id])=>id===trip.assigned_driver_id))driverOptions.push([trip.assigned_driver_id,"Existing assignment (driver unavailable)"]);const driver=select(driverOptions,trip.assigned_driver_id||"");if(trip.status==="pending"){driver.disabled=true;driver.title="Confirm and save this ride before assigning a driver."}driver.dataset.rideDriver="true";driver.addEventListener("change",()=>{if(driver.value&&["confirmed","assigned"].includes(status.value)){status.value="assigned"}else if(!driver.value&&status.value==="assigned"){status.value="confirmed"}row.classList.remove("ride-pending","ride-confirmed","ride-assigned","ride-completed","ride-cancelled");row.classList.add(tripColor(status.value));if(selectedTripIds.has(trip.id)&&selectedTripIds.size>=1&&driver.value){$("bulk-driver").value=driver.value;previewSelectedChanges("driver",driver.value)}});if(archivedAssigned&&staffRole==="admin"){const opt=Array.from(driver.options).find(o=>o.value===archivedAssigned.id);if(opt)opt.disabled=true}td(row,driver);
 const driverComment=el("textarea");driverComment.rows=2;driverComment.maxLength=4000;driverComment.className="driver-comment-edit";driverComment.title=trip.notes||"Driver comments — visible to assigned driver";driverComment.placeholder="Notes for driver";driverComment.value=[trip.wheelchair_required&&!/\bwheelchair\b/i.test(trip.notes||"")?"Wheelchair required":null,trip.notes||null].filter(Boolean).join(" | ");expandOnClick(driverComment,"Driver Comments");td(row,driverComment);const internal=el("textarea");internal.rows=2;internal.maxLength=4000;internal.title=trip.internal_notes||"Internal comments";internal.placeholder="Staff only — not visible to driver";internal.value=trip.internal_notes||"";internal.addEventListener("input",()=>{row.classList.toggle("has-internal-comments",!!internal.value.trim());row.classList.toggle("cancelled-no-internal-comments",!internal.value.trim()&&trip.status==="cancelled")});expandOnClick(internal,"Internal Comments");td(row,internal);
 const save=el("button","Save");save.addEventListener("click",async()=>{
  const selectedAction=status.value;
@@ -776,7 +798,7 @@ const save=el("button","Save");save.addEventListener("click",async()=>{
  const latest=latestRows.find(item=>item.id===trip.id);
  if(!latest)throw Error("Ride saved, but the refreshed record is unavailable. Use Refresh to update the board.");
  const versions=await api("/rest/v1/trips?select=id,updated_at&id=eq."+encodeURIComponent(trip.id)+"&limit=1");
- latest.updated_at=versions[0]?.updated_at||null;
+ if(latest.updated_at!==versions[0]?.updated_at)latest.updated_at=null;
  // A stale background refresh must not replace other edited rows.
  const fresh=renderRideRow(latest);
  row.replaceWith(fresh);
@@ -1091,7 +1113,13 @@ async function loadEmployeeAudit(){
    };
    const meaningful=["ride_changed","update_ride","update_ride_contact","bulk_update_status","bulk_assign_driver","import_sfrt_csv","create_ride","create_driver","create_dispatcher","change_username","reset_password","delete_employee"].includes(e.action);
    if(!meaningful)continue;
-   const lines=Object.entries(changes).map(([field,values])=>(labels[field]||field)+": "+show(field,values.before??values.old)+" → "+show(field,values.after??values.new));
+   const lines=Object.entries(changes).map(([field,values])=>{
+    const label=labels[field]||field;
+    if(values===null||typeof values!=="object"||Array.isArray(values))return label+": "+show(field,values);
+    const before=Object.prototype.hasOwnProperty.call(values,"before")?values.before:values.old;
+    const after=Object.prototype.hasOwnProperty.call(values,"after")?values.after:values.new;
+    return label+": "+show(field,before)+" → "+show(field,after);
+   });
    if(!lines.length&&e.action==="bulk_update_status"&&e.details?.status)lines.push("New status: "+e.details.status);
    if(!lines.length&&e.action==="bulk_assign_driver"&&e.details?.driver_id)lines.push("Assigned driver: "+show("assigned_driver_id",e.details.driver_id));
    if(!lines.length&&e.action==="ride_changed"){
@@ -1200,7 +1228,7 @@ function dispatchHasUnsavedEdits(){
  const panel=$("dispatch-panel");
  if(!panel||panel.classList.contains("hidden"))return true;
  const focused=document.activeElement;
- if(focused&&panel.contains(focused)&&focused.matches("input,textarea,select,[contenteditable]"))return true;
+ if(focused&&$("trips").contains(focused)&&focused.matches("input,textarea,select,[contenteditable]"))return true;
  if(panel.querySelector(".time-draft")||document.querySelector(".cell-editor-overlay,.contact-action-popover,.time-editor:not(.hidden)"))return true;
  // Do not discard any unsaved row edits while auto-refreshing.
  for(const row of $("trips").querySelectorAll("tr")){
@@ -1219,7 +1247,7 @@ setInterval(async()=>{
 },15000);
 // Supabase Realtime is an enhancement, not a dependency: existing polling remains the fallback.
 // Database publication/RLS permissions must allow authenticated trip change events.
-let realtimeSocket=null,realtimeRetry=null,realtimeHeartbeat=null,realtimeSeq=0,realtimeDebounce=null,realtimeIdentity="";
+let realtimeSocket=null,realtimeRetry=null,realtimeHeartbeat=null,realtimeSeq=0,realtimeDebounce=null,realtimeIdentity="",realtimeWatchdog=null;
 function realtimeRefresh(){
  if(!token||document.hidden||navigator.onLine===false)return;
  clearTimeout(realtimeDebounce);
@@ -1232,7 +1260,7 @@ function realtimeRefresh(){
  },350);
 }
 function stopTripRealtime(){
- clearTimeout(realtimeRetry);clearTimeout(realtimeDebounce);clearInterval(realtimeHeartbeat);
+ clearTimeout(realtimeRetry);clearTimeout(realtimeDebounce);clearInterval(realtimeHeartbeat);clearTimeout(realtimeWatchdog);
  realtimeRetry=null;realtimeHeartbeat=null;realtimeDebounce=null;
  if(realtimeSocket){const socket=realtimeSocket;realtimeSocket=null;socket.onclose=null;socket.close()}
  realtimeIdentity="";
@@ -1246,23 +1274,35 @@ function startTripRealtime(){
  try{
   const socket=new WebSocket(BASE.replace(/^http/,"ws")+"/realtime/v1/websocket?apikey="+encodeURIComponent(KEY)+"&vsn=1.0.0");
   realtimeSocket=socket;
+  realtimeWatchdog=setTimeout(()=>{if(realtimeSocket===socket)socket.close()},15000);
+  let heartbeatRef=null,joinRef=null;
   const send=(event,payload={})=>{if(socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({topic:"realtime:trips",event,payload,ref:String(++realtimeSeq)}))};
   socket.onopen=()=>{
    if(realtimeSocket!==socket||token!==currentToken){socket.close();return}
+   joinRef=String(realtimeSeq+1);
    send("phx_join",{config:{broadcast:{self:false},presence:{key:""},postgres_changes:[{event:"*",schema:"public",table:"trips"}]},access_token:currentToken});
-   realtimeHeartbeat=setInterval(()=>{if(socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({topic:"phoenix",event:"heartbeat",payload:{},ref:String(++realtimeSeq)}))},25000);
+   realtimeHeartbeat=setInterval(()=>{
+    if(heartbeatRef!==null){socket.close();return}
+    if(socket.readyState===WebSocket.OPEN){heartbeatRef=String(++realtimeSeq);socket.send(JSON.stringify({topic:"phoenix",event:"heartbeat",payload:{},ref:heartbeatRef}))}
+   },25000);
   };
   socket.onmessage=event=>{
    if(realtimeSocket!==socket||token!==currentToken)return;
    try{
     const data=JSON.parse(event.data);
+    if(data.event==="phx_reply"&&data.ref===heartbeatRef&&data.payload?.status==="ok")heartbeatRef=null;
+    if(data.event==="phx_reply"&&data.ref===joinRef){
+     if(data.payload?.status==="ok"){clearTimeout(realtimeWatchdog);realtimeRefresh()}
+     else socket.close();
+    }
+    if(data.event==="phx_error"||data.event==="phx_close")socket.close();
     if(data.event==="postgres_changes"||data.event==="INSERT"||data.event==="UPDATE"||data.event==="DELETE")realtimeRefresh();
     if(data.event==="phx_reply"&&data.payload?.status==="error")console.warn("Realtime subscription unavailable; polling remains active");
    }catch(e){console.warn("Realtime event parse",e)}
   };
   socket.onclose=()=>{
    if(realtimeSocket!==socket)return;
-   realtimeSocket=null;clearInterval(realtimeHeartbeat);realtimeHeartbeat=null;
+   realtimeSocket=null;clearInterval(realtimeHeartbeat);clearTimeout(realtimeWatchdog);realtimeHeartbeat=null;
    if(token===currentToken&&!document.hidden&&navigator.onLine!==false)realtimeRetry=setTimeout(startTripRealtime,10000);
   };
   socket.onerror=()=>{socket.close()};
