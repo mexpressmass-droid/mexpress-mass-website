@@ -555,16 +555,16 @@ function renderDriverStats(rides){
  const entries=[...totals.values()].sort((a,b)=>b.completed-a.completed||a.name.localeCompare(b.name));
  if(!entries.length){
   const tr=el("tr");const cell=el("td","No completed or cancelled rides with an assigned driver match these filters.");
-  cell.colSpan=4;tr.append(cell);rows.append(tr);return;
+  cell.colSpan=5;tr.append(cell);rows.append(tr);return;
  }
  for(const entry of entries){
   const tr=el("tr");
-  for(const value of [entry.name,entry.completed,entry.cancelled,"$"+(entry.value/100).toFixed(2)])td(tr,el("span",String(value)));
+  for(const value of [entry.name,entry.completed,entry.cancelled,(entry.completed+entry.cancelled?Math.round(100*entry.completed/(entry.completed+entry.cancelled))+"%":"—"),"$"+(entry.value/100).toFixed(2)])td(tr,el("span",String(value)));
   rows.append(tr);
  }
  const total=entries.reduce((sum,item)=>({completed:sum.completed+item.completed,cancelled:sum.cancelled+item.cancelled,value:sum.value+item.value}),{completed:0,cancelled:0,value:0});
  const tr=el("tr");tr.className="driver-stats-total";
- for(const value of ["Total",total.completed,total.cancelled,"$"+(total.value/100).toFixed(2)])td(tr,el("strong",String(value)));
+ for(const value of ["Total",total.completed,total.cancelled,(total.completed+total.cancelled?Math.round(100*total.completed/(total.completed+total.cancelled))+"%":"—"),"$"+(total.value/100).toFixed(2)])td(tr,el("strong",String(value)));
  rows.append(tr);
 }
 async function load({silent=false}={}){if(refreshing)return;refreshing=true;if(!silent)msg("Loading...");try{allDriverProfiles=await api("/rest/v1/driver_profiles?select=id,username,display_name,role,is_active&role=in.(admin,dispatcher,driver)&order=display_name.asc");drivers=allDriverProfiles.filter(d=>d.is_active===true);const scheduleDriver=$("schedule-driver"),selectedScheduleDriver=scheduleDriver.value;scheduleDriver.replaceChildren(new Option("All drivers",""),new Option("Unassigned rides","unassigned"));for(const profile of allDriverProfiles.filter(d=>d.role==="driver"))scheduleDriver.add(new Option(profile.display_name+" ("+profile.username+")"+(profile.is_active?"":" — inactive"),profile.id));scheduleDriver.value=selectedScheduleDriver;if(scheduleDriver.selectedIndex<0)scheduleDriver.value="";const bulkDriver=$("bulk-driver"),previousBulkDriver=bulkDriver.value;bulkDriver.replaceChildren();for(const [id,label] of [["","No driver change"],...drivers.filter(d=>d.role==="driver").map(d=>[d.id,d.display_name+" ("+d.username+")"])]){const opt=el("option",label);opt.value=id;bulkDriver.append(opt)}bulkDriver.value=previousBulkDriver;if(bulkDriver.selectedIndex<0)bulkDriver.value="";const archivedIds=new Set((await employeeAdminRequest({action:"archive_list"})).rides.map(t=>t.id));const rpcTrips=await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"});
