@@ -846,7 +846,7 @@ async function loadChatMessages(){
   const oldAtBottom=thread.scrollHeight-thread.scrollTop-thread.clientHeight<CHAT_BOTTOM_THRESHOLD;
   const previousScrollTop=thread.scrollTop;
   const [rows,readAt,otherReadAt]=await Promise.all([
-   api("/rest/v1/chat_messages?select=id,sender_id,message_text,attachment_path,attachment_name,attachment_type,created_at&conversation_id=eq."+encodeURIComponent(id)+"&order=created_at.asc&limit=200"),
+   api("/rest/v1/chat_messages?select=id,sender_id,message_text,attachment_path,attachment_name,attachment_type,created_at&conversation_id=eq."+encodeURIComponent(id)+"&order=created_at.desc&limit=200").then(messages=>messages.reverse()),
    newConversation?getChatReadPosition(id):Promise.resolve(null),
    getOtherReadPosition(id)
   ]);
