@@ -260,6 +260,27 @@ function downloadArchiveCsv(rows,filename){
  const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),link=document.createElement("a");
  link.href=url;link.download=filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
+$("archive-driver-export").addEventListener("click",()=>{
+ if(!lastArchiveReport.length){$("archive-notice").textContent="No rides match these filters.";return}
+ const totals=new Map();
+ for(const ride of lastArchiveReport){
+  if(!ride.assigned_driver_id)continue;
+  const id=ride.assigned_driver_id;
+  if(!totals.has(id)){
+   const profile=allDriverProfiles.find(p=>p.id===id);
+   totals.set(id,{name:profile?.display_name||profile?.username||"Historical driver "+id.slice(0,8),completed:0,cancelled:0,value:0});
+  }
+  const item=totals.get(id);
+  if(ride.status==="completed"){item.completed++;item.value+=Number(ride.price_cents)||0}
+  else if(ride.status==="cancelled")item.cancelled++;
+ }
+ const rows=[["Driver","Completed rides","Cancelled rides","Completion rate (%)","Completed value USD"]];
+ for(const item of [...totals.values()].sort((a,b)=>a.name.localeCompare(b.name))){
+  const total=item.completed+item.cancelled;
+  rows.push([item.name,item.completed,item.cancelled,total?(100*item.completed/total).toFixed(1):"", (item.value/100).toFixed(2)]);
+ }
+ downloadArchiveCsv(rows,"MExpress_Driver_Summary_"+Date.now()+".csv");
+});
 $("archive-summary-export").addEventListener("click",()=>{
  if(!lastArchiveReport.length){$("archive-notice").textContent="No rides match these filters.";return}
  const rows=[["Month (Boston)","Completed rides","Cancelled rides","Completed value USD"],...archiveMonthSummary(lastArchiveReport).map(item=>[item.month,item.completed,item.cancelled,(item.value/100).toFixed(2)])];
