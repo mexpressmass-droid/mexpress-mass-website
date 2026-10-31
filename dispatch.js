@@ -1128,6 +1128,61 @@ setInterval(async()=>{
  try{await load({silent:true})}catch(error){console.warn("Dispatch auto-refresh failed",error)}
  finally{dispatchAutoRefreshBusy=false}
 },15000);
+// Supabase Realtime is an enhancement, not a dependency: existing polling remains the fallback.
+// Database publication/RLS permissions must allow authenticated trip change events.
+let realtimeSocket=null,realtimeRetry=null,realtimeHeartbeat=null,realtimeSeq=0,realtimeDebounce=null,realtimeIdentity="";
+function realtimeRefresh(){
+ if(!token||document.hidden||navigator.onLine===false)return;
+ clearTimeout(realtimeDebounce);
+ realtimeDebounce=setTimeout(()=>{
+  if(staffRole==="driver"){
+   if(!rideRefreshBusy&&!driverStatusSaving)loadMyRides({silent:true}).catch(e=>console.warn("Realtime driver refresh",e));
+  }else if(["admin","dispatcher"].includes(staffRole)){
+   if(!refreshing&&!dispatchAutoRefreshBusy&&!dispatchHasUnsavedEdits())load({silent:true}).catch(e=>console.warn("Realtime dispatch refresh",e));
+  }
+ },350);
+}
+function stopTripRealtime(){
+ clearTimeout(realtimeRetry);clearTimeout(realtimeDebounce);clearInterval(realtimeHeartbeat);
+ realtimeRetry=null;realtimeHeartbeat=null;realtimeDebounce=null;
+ if(realtimeSocket){const socket=realtimeSocket;realtimeSocket=null;socket.onclose=null;socket.close()}
+ realtimeIdentity="";
+}
+function startTripRealtime(){
+ if(!token||!userId||!["admin","dispatcher","driver"].includes(staffRole)||document.hidden||navigator.onLine===false){stopTripRealtime();return}
+ const identity=userId+":"+token;
+ if(realtimeSocket&&realtimeIdentity===identity&&[WebSocket.CONNECTING,WebSocket.OPEN].includes(realtimeSocket.readyState))return;
+ stopTripRealtime();realtimeIdentity=identity;
+ const currentToken=token;
+ try{
+  const socket=new WebSocket(BASE.replace(/^http/,"ws")+"/realtime/v1/websocket?apikey="+encodeURIComponent(KEY)+"&vsn=1.0.0");
+  realtimeSocket=socket;
+  const send=(event,payload={})=>{if(socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({topic:"realtime:trips",event,payload,ref:String(++realtimeSeq)}))};
+  socket.onopen=()=>{
+   if(realtimeSocket!==socket||token!==currentToken){socket.close();return}
+   send("phx_join",{config:{broadcast:{self:false},presence:{key:""},postgres_changes:[{event:"*",schema:"public",table:"trips"}]},access_token:currentToken});
+   realtimeHeartbeat=setInterval(()=>{if(socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({topic:"phoenix",event:"heartbeat",payload:{},ref:String(++realtimeSeq)}))},25000);
+  };
+  socket.onmessage=event=>{
+   if(realtimeSocket!==socket||token!==currentToken)return;
+   try{
+    const data=JSON.parse(event.data);
+    if(data.event==="postgres_changes"||data.event==="INSERT"||data.event==="UPDATE"||data.event==="DELETE")realtimeRefresh();
+    if(data.event==="phx_reply"&&data.payload?.status==="error")console.warn("Realtime subscription unavailable; polling remains active");
+   }catch(e){console.warn("Realtime event parse",e)}
+  };
+  socket.onclose=()=>{
+   if(realtimeSocket!==socket)return;
+   realtimeSocket=null;clearInterval(realtimeHeartbeat);realtimeHeartbeat=null;
+   if(token===currentToken&&!document.hidden&&navigator.onLine!==false)realtimeRetry=setTimeout(startTripRealtime,10000);
+  };
+  socket.onerror=()=>{socket.close()};
+ }catch(e){console.warn("Realtime connection unavailable",e);realtimeRetry=setTimeout(startTripRealtime,10000)}
+}
+setInterval(()=>{if(token&&userId&&!document.hidden&&navigator.onLine!==false)startTripRealtime();else if(realtimeSocket)stopTripRealtime()},5000);
+window.addEventListener("offline",stopTripRealtime);
+window.addEventListener("online",()=>{startTripRealtime();realtimeRefresh()});
+document.addEventListener("visibilitychange",()=>{if(document.hidden)stopTripRealtime();else{startTripRealtime();realtimeRefresh()}});
 // Refresh the dispatch board on return from another tab, while preserving unsaved edits.
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&token&&["admin","dispatcher"].includes(staffRole)&&!refreshing&&!dispatchAutoRefreshBusy&&!dispatchHasUnsavedEdits())load({silent:true})});
 restoreSession();
