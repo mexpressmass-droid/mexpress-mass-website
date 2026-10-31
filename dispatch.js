@@ -197,7 +197,7 @@ async function loadArchive(){
    d.add(new Option(profile?profile.display_name+" ("+profile.username+")":"Historical driver "+id.slice(0,8),id));
   }
   d.value=old;renderArchive();
- }catch(e){notice.textContent=e.message}
+ }catch(e){archiveRides=[];selectedArchivedIds.clear();renderArchive();notice.textContent="Unable to load archive: "+e.message}
 }
 function renderArchive(){
  const body=$("archive-trips");body.replaceChildren();
