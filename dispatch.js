@@ -874,7 +874,7 @@ async function loadChatMessages(){
   updateChatReceiptIndicators();
   const latestId=rows.at(-1)?.id||null;
   const changed=newConversation||chatLastMessageId!==latestId;
-  if(!changed&&!chatForceBottom)return;
+  if(!changed&&!chatForceBottom){if(rows.length&&!document.hidden&&oldAtBottom)markChatRead(id,rows.at(-1).created_at);return;}
   thread.replaceChildren();
   let firstUnread=null;
   for(const message of rows){
