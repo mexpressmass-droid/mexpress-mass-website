@@ -235,7 +235,7 @@ function renderArchiveInsights(rides){
  }
  const chart=$("archive-chart");chart.replaceChildren();
  const entries=archiveMonthSummary(rides).slice(-12).map(item=>[item.month,item.completed]);
- if(!entries.length){chart.append(el("span","No completed rides for this selection."));return}
+ if(!entries.length){chart.append(el("span","No archived rides for this selection."));return}
  const max=Math.max(...entries.map(x=>x[1]),1);
  for(const [month,count] of entries){
   const group=el("div");group.className="bar-group";
