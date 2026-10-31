@@ -616,7 +616,7 @@ async function fetchActiveTripMetadata(rides){
   while(true){
    const params=new URLSearchParams({select:"*",id:"in.("+batch.join(",")+")",order:"id.asc",limit:String(batch.length)});
    if(after)params.set("and","(id.gt."+after+")");
-   const rows=await api("/rest/v1/trips?"+params);
+   const rows=await api("/rest/v1/rpc/dispatch_get_trips?"+params,{method:"POST",body:"{}"});
    if(!Array.isArray(rows))throw Error("Invalid ride metadata response");
    if(!rows.length)break;
    for(const row of rows){
@@ -683,7 +683,7 @@ const pu=new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_
    const saveContact=el("button","Save");saveContact.type="button";
    saveContact.addEventListener("click",async()=>{
     saveContact.disabled=true;
-    try{await employeeAdminRequest({action:"update_ride_contact",ride_id:trip.id,field,value:input.value});button.textContent=input.value.trim()||"—";pop.remove();msg(label+" saved.");await load()}catch(err){msg(err.message,true)}finally{saveContact.disabled=false}
+    try{await employeeAdminRequest({action:"update_ride_contact",ride_id:trip.id,expected_updated_at:trip.updated_at,field,value:input.value});button.textContent=input.value.trim()||"—";pop.remove();msg(label+" saved.");await load()}catch(err){msg(err.message,true)}finally{saveContact.disabled=false}
    });
    input.addEventListener("keydown",e=>{if(e.key==="Enter")saveContact.click();if(e.key==="Escape")pop.remove()});
    actions.append(cancel,saveContact);pop.append(input,actions);input.focus();input.select();
@@ -750,7 +750,7 @@ function addressEditor(value,placeholder,fieldName){
   const cancel=el("button","Cancel");cancel.type="button";cancel.addEventListener("click",()=>pop.remove());
   const saveAddress=el("button","Save");saveAddress.type="button";saveAddress.addEventListener("click",async()=>{
    const next=input.value.trim();if(!next){msg(placeholder+" is required.",true);return}
-   saveAddress.disabled=true;try{await employeeAdminRequest({action:"update_ride_address",ride_id:trip.id,field:fieldName,value:next});field.value=next;shown.textContent=next;shown.title=next;pop.remove();msg(placeholder+" saved.");await load()}catch(err){msg(err.message,true)}finally{saveAddress.disabled=false}
+   saveAddress.disabled=true;try{await employeeAdminRequest({action:"update_ride_address",ride_id:trip.id,expected_updated_at:trip.updated_at,field:fieldName,value:next});field.value=next;shown.textContent=next;shown.title=next;pop.remove();msg(placeholder+" saved.");await load()}catch(err){msg(err.message,true)}finally{saveAddress.disabled=false}
   });
   input.addEventListener("keydown",e=>{if(e.key==="Enter")saveAddress.click();if(e.key==="Escape")pop.remove()});
   actions.append(cancel,saveAddress);pop.append(title,input,actions);
@@ -794,7 +794,7 @@ const save=el("button","Save");save.addEventListener("click",async()=>{
  if(!confirm("Confirm changes to this ride?"))return;
  save.disabled=true;try{const cents=price.value.trim()===""?null:Math.round(Number(price.value)*100);if(cents!==null&&(!Number.isSafeInteger(cents)||cents<0))throw Error("Invalid price");await employeeAdminRequest({action:"update_ride",ride_id:trip.id,expected_updated_at:trip.updated_at,status:status.value,price_cents:cents,assigned_driver_id:driver.value||null,pickup_at:timeLocked?trip.pickup_at:changedBostonTime(trip.pickup_at,puEdit.value),dropoff_at:timeLocked?trip.dropoff_at:(dropEdit.value?(trip.dropoff_at?changedBostonTime(trip.dropoff_at,dropEdit.value):changedBostonTime(trip.pickup_at,dropEdit.value)):null),pickup_address:pickupInput.value,dropoff_address:dropoffInput.value,notes:driverComment.value.trim()||null,internal_notes:internal.value.trim()||null});
  // Refresh only the saved row; preserve unsaved drafts and checkbox selections elsewhere.
- const latestRows=await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"});
+ const latestRows=await api("/rest/v1/rpc/dispatch_get_trips?id=eq."+encodeURIComponent(trip.id)+"&limit=1",{method:"POST",body:"{}"});
  const latest=latestRows.find(item=>item.id===trip.id);
  if(!latest)throw Error("Ride saved, but the refreshed record is unavailable. Use Refresh to update the board.");
  const versions=await api("/rest/v1/trips?select=id,updated_at&id=eq."+encodeURIComponent(trip.id)+"&limit=1");
@@ -817,7 +817,7 @@ const save=el("button","Save");save.addEventListener("click",async()=>{
  msg("Ride updated. Other unsaved edits were preserved.");
  }catch(err){if(/changed by another user|version information is missing|archived\. Restore/i.test(err.message)){let details="";
  try{
-  const latest=await api("/rest/v1/rpc/dispatch_get_trips",{method:"POST",body:"{}"});
+  const latest=await api("/rest/v1/rpc/dispatch_get_trips?id=eq."+encodeURIComponent(trip.id)+"&limit=1",{method:"POST",body:"{}"});
   const current=latest.find(item=>item.id===trip.id);
   if(current){
    const fields=[["Pickup time","pickup_at"],["Drop-off time","dropoff_at"],["Pickup address","pickup_address"],["Drop-off address","dropoff_address"],["Status","status"],["Price","price_cents"],["Driver","assigned_driver_id"],["Driver comments","notes"],["Internal comments","internal_notes"]];
