@@ -233,10 +233,8 @@ function renderArchiveInsights(rides){
  for(const [label,amount] of [["Archived rides",rides.length],["Completed",completed.length],["Cancelled",cancelled.length],["Completed value","$"+(value/100).toFixed(2)]]){
   const box=el("div");box.className="metric";box.append(el("span",label),el("strong",String(amount)));kpis.append(box);
  }
- const months=new Map();
- for(const t of completed){const month=bostonDate(t.pickup_at).slice(0,7);months.set(month,(months.get(month)||0)+1)}
  const chart=$("archive-chart");chart.replaceChildren();
- const entries=[...months].sort(([a],[b])=>a.localeCompare(b)).slice(-12);
+ const entries=archiveMonthSummary(rides).filter(item=>item.completed>0).slice(-12).map(item=>[item.month,item.completed]);
  if(!entries.length){chart.append(el("span","No completed rides for this selection."));return}
  const max=Math.max(...entries.map(x=>x[1]),1);
  for(const [month,count] of entries){
