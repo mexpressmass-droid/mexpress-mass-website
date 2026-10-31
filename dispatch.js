@@ -257,6 +257,16 @@ function archiveMonthSummary(rides){
  return [...months.values()].sort((a,b)=>a.month.localeCompare(b.month));
 }
 function archiveCsvCell(value){let str=String(value??"");if(["=","+","-","@"].includes(str.trimStart().charAt(0)))str="'"+str;return '"'+str.replace(/"/g,'""')+'"'}
+function downloadArchiveCsv(rows,filename){
+ const csv="\uFEFF"+rows.map(row=>row.map(archiveCsvCell).join(",")).join("\r\n");
+ const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),link=document.createElement("a");
+ link.href=url;link.download=filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+$("archive-summary-export").addEventListener("click",()=>{
+ if(!lastArchiveReport.length){$("archive-notice").textContent="No rides match these filters.";return}
+ const rows=[["Month (Boston)","Completed rides","Cancelled rides","Completed value USD"],...archiveMonthSummary(lastArchiveReport).map(item=>[item.month,item.completed,item.cancelled,(item.value/100).toFixed(2)])];
+ downloadArchiveCsv(rows,"MExpress_Monthly_Summary_"+Date.now()+".csv");
+});
 $("archive-export").addEventListener("click",()=>{
  if(!lastArchiveReport.length){$("archive-notice").textContent="No rides match these filters.";return}
  const headers=["Trip ID","Pickup (Boston)","Passenger","Phone","Pickup address","Drop-off address","Status","Driver","Price USD","Archived at"];
