@@ -688,8 +688,9 @@ const pu=new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_
  timeActions.append(timeCancel,timeApply);timeEdit.append(timeActions);
  if(!timeLocked){timeCell.classList.add("time-cell-clickable");timeCell.title+=" | Double-click to edit";timeCell.addEventListener("dblclick",()=>{if(timeEdit.classList.contains("hidden")){document.body.append(timeEdit);timeEdit.classList.remove("hidden");if(!selectedTripIds.has(trip.id))chooseRide(trip.id,false);puEdit.focus()}else cancelTime()})}
  timeWrap.append(timeEdit);td(row,timeWrap);const passenger=el("div");passenger.className="compact-passenger";passenger.title=[trip.passenger_name,trip.passenger_phone,trip.passenger_email].filter(Boolean).join(" | ");function contactAction(field,label,value){
- const button=el("span",value||"—");button.className="contact-action-trigger";button.title="Select text to copy; double-click to edit "+label;
- button.addEventListener("dblclick",event=>{
+ const button=el("span",value||"—");button.className="contact-action-trigger";button.title="Select text to copy; double-click or press Enter to edit "+label;
+ button.tabIndex=0;button.setAttribute("role","button");button.setAttribute("aria-label","Edit "+label);
+ const openContactEditor=event=>{
   event.stopPropagation();
   document.querySelectorAll(".contact-action-popover").forEach(node=>node.remove());
   const pop=el("div");pop.className="contact-action-popover";
@@ -697,7 +698,7 @@ const pu=new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_
   const copy=el("button","Copy");copy.type="button";
   copy.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(button.textContent==="—"?"":button.textContent);msg(label+" copied.");pop.remove()}catch(err){msg("Unable to copy: "+err.message,true)}});
   const edit=el("button","Edit");edit.type="button";
-  edit.addEventListener("click",()=>{
+  const editContact=()=>{
    pop.replaceChildren(title);
    const input=el("input");input.type="text";input.value=button.textContent==="—"?"":button.textContent;input.maxLength=250;
    const actions=el("div");actions.className="contact-action-buttons";
@@ -709,15 +710,18 @@ const pu=new Date(trip.pickup_at).toLocaleString("en-US",{timeZone:"America/New_
    });
    input.addEventListener("keydown",e=>{if(e.key==="Enter")saveContact.click();if(e.key==="Escape")pop.remove()});
    actions.append(cancel,saveContact);pop.append(input,actions);input.focus();input.select();
-  });
+  };
+  edit.addEventListener("click",editContact);
   const actions=el("div");actions.className="contact-action-buttons";actions.append(copy,edit);pop.append(title,actions);
   const rect=button.getBoundingClientRect();pop.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-290))+"px";pop.style.top=Math.min(rect.bottom+5,window.innerHeight-165)+"px";
   document.body.append(pop);
-  edit.click();
+  editContact();
   const dismiss=e=>{if(!pop.contains(e.target)&&e.target!==button){pop.remove();document.removeEventListener("pointerdown",dismiss,true)}};
   setTimeout(()=>document.addEventListener("pointerdown",dismiss,true),0);
   pop.addEventListener("keydown",e=>{if(e.key==="Escape"){pop.remove();document.removeEventListener("pointerdown",dismiss,true)}});
- });
+ };
+ button.addEventListener("dblclick",openContactEditor);
+ button.addEventListener("keydown",event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();openContactEditor(event)}});
  return button;
 }
 passenger.append(contactAction("passenger_name","Passenger name",trip.passenger_name));
