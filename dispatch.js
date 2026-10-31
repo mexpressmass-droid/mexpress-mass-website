@@ -245,7 +245,7 @@ function renderArchiveInsights(rides){
   group.append(el("span",String(count)),bar,el("small",month.slice(2)));chart.append(group);
  }
 }
-function archiveCsvCell(value){const str=String(value??"");return '"'+str.replace(/"/g,'""')+'"'}
+function archiveCsvCell(value){let str=String(value??"");if(/^[\\s]*[=+@-]/.test(str))str="'"+str;return '"'+str.replace(/"/g,'""')+'"'}
 $("archive-export").addEventListener("click",()=>{
  if(!lastArchiveReport.length){$("archive-notice").textContent="No rides match these filters.";return}
  const headers=["Trip ID","Pickup (Boston)","Passenger","Phone","Pickup address","Drop-off address","Status","Driver","Price USD","Archived at"];
