@@ -202,12 +202,14 @@ async function loadArchive(){
 function renderArchive(){
  const body=$("archive-trips");body.replaceChildren();
  const driver=$("archive-driver").value,status=$("archive-status").value,period=$("archive-period").value,date=$("archive-date").value;
- const end=period==="day"?addDays(date,1):period==="week"?addDays(date,7):period==="year"?(Number(date.slice(0,4))+1)+"-01-01":null;
- const start=period==="year"?date.slice(0,4)+"-01-01":date;
- let count=0;visibleArchivedIds=[];const matchingArchivedRides=[];
+ const end=period==="day"?addDays(date,1):period==="week"?addDays(date,7):period==="month"?(Number(date.slice(5,7))===12?(Number(date.slice(0,4))+1)+"-01-01":date.slice(0,4)+"-"+String(Number(date.slice(5,7))+1).padStart(2,"0")+"-01"):period==="year"?(Number(date.slice(0,4))+1)+"-01-01":null;
+ const start=period==="year"?date.slice(0,4)+"-01-01":period==="month"?date.slice(0,7)+"-01":date;
+ let count=0;visibleArchivedIds=[];const matchingArchivedRides=[];const search=($("archive-search").value||"").trim().toLowerCase();
  for(const t of archiveRides){
   const d=bostonDate(t.pickup_at);
   if(driver&&t.assigned_driver_id!==driver||status&&t.status!==status||period!=="all"&&date&&(d<start||d>=end))continue;
+  const driverName=allDriverProfiles.find(p=>p.id===t.assigned_driver_id)?.display_name||"";
+  if(search&&![t.passenger_name,t.pickup_address,t.dropoff_address,driverName].some(v=>String(v||"").toLowerCase().includes(search)))continue;
   matchingArchivedRides.push(t);
   const tr=el("tr");
   if(t.status==="completed")tr.classList.add("archive-completed");
@@ -218,10 +220,41 @@ function renderArchive(){
   for(const value of [new Date(t.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York"}),t.passenger_name,t.pickup_address+" → "+t.dropoff_address,t.status,allDriverProfiles.find(p=>p.id===t.assigned_driver_id)?.display_name||"Unassigned / historical",t.price_cents==null?"—":"$"+(t.price_cents/100).toFixed(2),new Date(t.archived_at).toLocaleString("en-US",{timeZone:"America/New_York"})])td(tr,el("span",value));
   body.append(tr);visibleArchivedIds.push(t.id);count++;
  }
- renderDriverStats(matchingArchivedRides);
+ renderDriverStats(matchingArchivedRides);renderArchiveInsights(matchingArchivedRides);
  $("archive-notice").textContent=count+" archived ride(s) shown.";updateArchiveSelection();
 }
-for(const id of ["archive-driver","archive-status","archive-period","archive-date"])$(id).addEventListener("change",renderArchive);
+for(const id of ["archive-driver","archive-status","archive-period","archive-date","archive-search"])$(id).addEventListener("change",renderArchive);
+let lastArchiveReport=[];
+function renderArchiveInsights(rides){
+ lastArchiveReport=rides.slice();
+ const completed=rides.filter(t=>t.status==="completed"),cancelled=rides.filter(t=>t.status==="cancelled");
+ const value=completed.reduce((n,t)=>n+(Number(t.price_cents)||0),0);
+ const kpis=$("archive-kpis");kpis.replaceChildren();
+ for(const [label,amount] of [["Archived rides",rides.length],["Completed",completed.length],["Cancelled",cancelled.length],["Completed value","$"+(value/100).toFixed(2)]]){
+  const box=el("div");box.className="metric";box.append(el("span",label),el("strong",String(amount)));kpis.append(box);
+ }
+ const months=new Map();
+ for(const t of completed){const month=bostonDate(t.pickup_at).slice(0,7);months.set(month,(months.get(month)||0)+1)}
+ const chart=$("archive-chart");chart.replaceChildren();
+ const entries=[...months].sort(([a],[b])=>a.localeCompare(b)).slice(-12);
+ if(!entries.length){chart.append(el("span","No completed rides for this selection."));return}
+ const max=Math.max(...entries.map(x=>x[1]),1);
+ for(const [month,count] of entries){
+  const group=el("div");group.className="bar-group";
+  const bar=el("div");bar.className="bar";bar.style.height=Math.max(3,Math.round(count/max*105))+"px";bar.title=month+": "+count+" completed rides";
+  group.append(el("span",String(count)),bar,el("small",month.slice(2)));chart.append(group);
+ }
+}
+function archiveCsvCell(value){const str=String(value??"");return '"'+str.replace(/"/g,'""')+'"'}
+$("archive-export").addEventListener("click",()=>{
+ if(!lastArchiveReport.length){$("archive-notice").textContent="No rides match these filters.";return}
+ const headers=["Trip ID","Pickup (Boston)","Passenger","Phone","Pickup address","Drop-off address","Status","Driver","Price USD","Archived at"];
+ const rows=lastArchiveReport.map(t=>[t.id,new Date(t.pickup_at).toLocaleString("en-US",{timeZone:"America/New_York"}),t.passenger_name,t.passenger_phone,t.pickup_address,t.dropoff_address,t.status,allDriverProfiles.find(p=>p.id===t.assigned_driver_id)?.display_name||"",t.price_cents==null?"":(Number(t.price_cents)/100).toFixed(2),t.archived_at||""]);
+ const csv="\uFEFF"+[headers,...rows].map(row=>row.map(archiveCsvCell).join(",")).join("\r\n");
+ const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),link=document.createElement("a");
+ const date=$("archive-date").value||bostonDate(new Date());
+ link.href=url;link.download="MExpress_Archive_"+($("archive-period").value==="month"?date.slice(0,7):date)+"_"+Date.now()+".csv";document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+});
 $("archive-refresh").addEventListener("click",loadArchive);
 $("archive-date").value=bostonDate(new Date());
 $("tab-archive").addEventListener("click",async()=>{if(!confirmLeaveDispatch())return;for(const id of ["dispatch-panel","my-rides-panel","messages-panel","employees-panel"])$(id).classList.add("hidden");$("archive-panel").classList.remove("hidden");for(const id of ["tab-dispatch","tab-my-rides","tab-messages","tab-employees","tab-archive"])$(id).classList.toggle("active",id==="tab-archive");await loadArchive()});
@@ -769,12 +802,17 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")closeChatLightbox()}
 function openChatLightbox(url){$("chat-lightbox-image").src=url;$("chat-lightbox").classList.remove("hidden")}
 
 function chatNotice(message,isError=false){const node=$("chat-notice");node.textContent=message;node.className=isError?"error":"muted"}
+let chatDirectoryCache=[];
+function filterChatDirectory(){
+ const chooser=$("chat-employee"),previous=chooser.value,term=$("chat-search").value.trim().toLowerCase();
+ chooser.replaceChildren(new Option("Select employee",""));
+ for(const person of chatDirectoryCache)if(!term||(person.display_name+" "+person.role).toLowerCase().includes(term))chooser.append(new Option(person.display_name+" ("+person.role+")",person.id));
+ if([...chooser.options].some(option=>option.value===previous))chooser.value=previous;
+}
+$("chat-search").addEventListener("input",filterChatDirectory);
 async function loadChatDirectory(){
   const staff=await api("/rest/v1/rpc/chat_employee_directory",{method:"POST",body:"{}"});
-  const chooser=$("chat-employee"),previous=chooser.value;
-  chooser.replaceChildren(new Option("Select employee",""));
-  for(const person of staff)chooser.append(new Option(person.display_name+" ("+person.role+")",person.id));
-  chooser.value=previous;
+  chatDirectoryCache=staff;filterChatDirectory();
 }
 async function getChatReadPosition(id){
  const rows=await api("/rest/v1/chat_read_positions?select=last_read_at&conversation_id=eq."+encodeURIComponent(id)+"&user_id=eq."+encodeURIComponent(userId)+"&limit=1");
