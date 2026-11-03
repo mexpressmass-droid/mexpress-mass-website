@@ -1,0 +1,54 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');
+test('column allowlist and write boundary preserve RLS and authorized staff RPC',{skip:!process.env.PGLITE_MODULE},async()=>{
+ const {PGlite}=require(process.env.PGLITE_MODULE);const db=new PGlite();
+ const uid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ try{
+ await db.exec(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;
+ CREATE SCHEMA auth; GRANT USAGE ON SCHEMA auth TO authenticated;
+ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+ CREATE TABLE public.driver_profiles(id uuid PRIMARY KEY,role text,is_active boolean);
+ CREATE TABLE public.trips(id uuid PRIMARY KEY,passenger_name text,passenger_phone text,passenger_email text,pickup_address text,dropoff_address text,pickup_at timestamptz,wheelchair_required boolean,trip_type text,notes text,price_cents int,assigned_driver_id uuid,status text,source text,created_at timestamptz,updated_at timestamptz,internal_notes text,archived_at timestamptz,archive_source text,dropoff_at timestamptz,distance_miles numeric);
+ CREATE FUNCTION public.is_dispatch_staff() RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path='' AS $$SELECT EXISTS(SELECT 1 FROM public.driver_profiles WHERE id=auth.uid() AND is_active AND role IN ('admin','dispatcher'))$$;
+ CREATE FUNCTION public.dispatch_get_trips() RETURNS SETOF public.trips LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$BEGIN IF NOT public.is_dispatch_staff() THEN RAISE EXCEPTION 'Access denied'; END IF; RETURN QUERY SELECT * FROM public.trips ORDER BY pickup_at ASC; END$$;
+ CREATE TYPE public.trip_status AS ENUM('pending','confirmed','assigned','on_the_way','arrived','boarded','completed','cancelled');
+ CREATE FUNCTION public.driver_update_trip_status(p_trip_id uuid,p_new_status public.trip_status) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$DECLARE v_current_status public.trip_status; BEGIN
+ IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Authentication required'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM public.driver_profiles WHERE id=auth.uid() AND role='driver' AND is_active=true) THEN RAISE EXCEPTION 'Active driver account required'; END IF;
+ SELECT status::public.trip_status INTO v_current_status FROM public.trips WHERE id=p_trip_id AND assigned_driver_id=auth.uid() FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Trip not found or not assigned to you'; END IF;
+ IF NOT ((v_current_status::text='assigned' AND p_new_status::text='on_the_way') OR (v_current_status::text='on_the_way' AND p_new_status::text='arrived') OR (v_current_status::text='arrived' AND p_new_status::text='boarded') OR (v_current_status::text='boarded' AND p_new_status::text='completed')) THEN RAISE EXCEPTION 'Invalid status transition'; END IF;
+ UPDATE public.trips SET status=p_new_status,updated_at=now() WHERE id=p_trip_id; END$$;
+ REVOKE ALL ON FUNCTION public.driver_update_trip_status(uuid,public.trip_status) FROM PUBLIC,anon; GRANT EXECUTE ON FUNCTION public.driver_update_trip_status(uuid,public.trip_status) TO authenticated;
+ REVOKE ALL ON FUNCTION public.dispatch_get_trips() FROM PUBLIC,anon; GRANT EXECUTE ON FUNCTION public.dispatch_get_trips() TO authenticated;
+ ALTER TABLE public.trips ENABLE ROW LEVEL SECURITY;
+ CREATE POLICY driver_read ON public.trips FOR SELECT TO authenticated USING(assigned_driver_id=auth.uid() AND EXISTS(SELECT 1 FROM public.driver_profiles WHERE id=auth.uid() AND is_active AND role='driver'));
+ CREATE POLICY staff_all ON public.trips TO authenticated USING(public.is_dispatch_staff()) WITH CHECK(public.is_dispatch_staff());
+ GRANT SELECT ON public.driver_profiles TO authenticated;
+ GRANT SELECT,INSERT,UPDATE ON public.trips TO authenticated;
+ GRANT SELECT(price_cents),UPDATE(internal_notes) ON public.trips TO authenticated;
+ GRANT ALL ON public.trips TO service_role;
+ CREATE VIEW public.driver_trips WITH(security_invoker=true) AS SELECT id,notes,status FROM public.trips WHERE assigned_driver_id=auth.uid(); GRANT SELECT ON public.driver_trips TO authenticated;
+ INSERT INTO public.driver_profiles VALUES('${uid(1)}','dispatcher',true),('${uid(2)}','driver',true),('${uid(3)}','driver',true),('${uid(4)}','driver',false);
+ INSERT INTO public.trips(id,passenger_name,assigned_driver_id,status,price_cents,internal_notes) VALUES('${uid(11)}','TEST ONLY A','${uid(2)}','assigned',100,'TEST ONLY private'),('${uid(12)}','TEST ONLY B','${uid(3)}','assigned',200,'TEST ONLY private');`);
+ await db.exec(fs.readFileSync('supabase/migrations/20261031200337_dispatch_trip_column_access_review.sql','utf8'));
+ const as=async n=>{await db.exec('RESET ROLE');await db.query("SELECT set_config('request.jwt.claim.sub',$1,false)",[uid(n)]);await db.exec('SET ROLE authenticated')};
+ await as(2);
+ assert.equal((await db.query('SELECT id,status FROM public.trips')).rows.length,1);
+ assert.equal((await db.query('SELECT * FROM public.driver_trips')).rows.length,1);
+ for(const sql of ['SELECT * FROM public.trips','SELECT price_cents FROM public.trips','SELECT internal_notes FROM public.trips','SELECT passenger_email FROM public.trips',"UPDATE public.trips SET status='completed'", "UPDATE public.trips SET internal_notes='TEST ONLY'",'DELETE FROM public.trips','INSERT INTO public.trips(id) VALUES(gen_random_uuid())'])await assert.rejects(db.query(sql),/permission denied/);
+ await assert.rejects(db.query('SELECT * FROM public.dispatch_get_trips()'),/Access denied/);
+ await db.query("SELECT public.driver_update_trip_status($1,'on_the_way')",[uid(11)]);
+ await assert.rejects(db.query("SELECT public.driver_update_trip_status($1,'on_the_way')",[uid(11)]),/Invalid status transition/);
+ await assert.rejects(db.query("SELECT public.driver_update_trip_status($1,'on_the_way')",[uid(12)]),/not assigned/);
+ await db.exec('RESET ROLE');await db.query('UPDATE public.trips SET assigned_driver_id=$1 WHERE id=$2',[uid(3),uid(11)]);
+ await as(2);assert.equal((await db.query('SELECT id FROM public.trips')).rows.length,0);
+ await assert.rejects(db.query("SELECT public.driver_update_trip_status($1,'arrived')",[uid(11)]),/not assigned/);
+ await as(3);assert.equal((await db.query('SELECT id FROM public.trips')).rows.length,2);await db.query("SELECT public.driver_update_trip_status($1,'arrived')",[uid(11)]);
+ await as(4);await assert.rejects(db.query("SELECT public.driver_update_trip_status($1,'arrived')",[uid(11)]),/Active driver/);assert.equal((await db.query('SELECT id FROM public.trips')).rows.length,0);
+ await as(1);assert.equal((await db.query('SELECT price_cents,internal_notes FROM public.dispatch_get_trips()')).rows.length,2);
+ await assert.rejects(db.query("UPDATE public.trips SET assigned_driver_id=NULL"),/permission denied/);
+ await db.exec('RESET ROLE; SET ROLE service_role');assert.equal((await db.query("UPDATE public.trips SET notes='TEST ONLY server' RETURNING id")).rows.length,2);
+ await db.exec('RESET ROLE; SET ROLE anon');await assert.rejects(db.query('SELECT id FROM public.trips'),/permission denied/);
+ await db.exec('RESET ROLE');assert.equal((await db.query("SELECT relrowsecurity FROM pg_class WHERE oid='public.trips'::regclass")).rows[0].relrowsecurity,true);
+ }finally{await db.close()}
+});
