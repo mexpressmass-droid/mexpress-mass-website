@@ -333,7 +333,7 @@ const ids=[...selectedTripIds],status=$("bulk-status").value;if(!ids.length)retu
 
 
 for(const [tab,panel,other] of [["tab-dispatch","dispatch-panel","my-rides-panel"],["tab-my-rides","my-rides-panel","dispatch-panel"]]){
-  $(tab).addEventListener("click",()=>{if(!confirmLeaveDispatch())return;$(panel).classList.remove("hidden");$(other).classList.add("hidden");$("employees-panel").classList.add("hidden");$("archive-panel").classList.add("hidden");$("tab-archive").classList.remove("active");$("messages-panel").classList.add("hidden");$("tab-messages").classList.remove("active");$("tab-dispatch").classList.toggle("active",tab==="tab-dispatch");$("tab-my-rides").classList.toggle("active",tab==="tab-my-rides");if(tab==="tab-my-rides")loadMyRides();saveView()});
+  $(tab).addEventListener("click",()=>{if(!confirmLeaveDispatch())return;$(panel).classList.remove("hidden");$(other).classList.add("hidden");$("employees-panel").classList.add("hidden");$("archive-panel").classList.add("hidden");$("tab-archive").classList.remove("active");$("tab-employees").classList.remove("active");$("messages-panel").classList.add("hidden");$("tab-messages").classList.remove("active");$("tab-dispatch").classList.toggle("active",tab==="tab-dispatch");$("tab-my-rides").classList.toggle("active",tab==="tab-my-rides");if(tab==="tab-my-rides")loadMyRides();saveView()});
 }
 // Per-driver ride snapshots detect assignments and schedule edits while this web app is open.
 let rideRefreshBusy=false;
@@ -1000,8 +1000,8 @@ $("chat-thread").addEventListener("scroll",()=>{
 },{passive:true});
 
 $("tab-messages").addEventListener("click",async()=>{if(!confirmLeaveDispatch())return;
-  $("dispatch-panel").classList.add("hidden");$("my-rides-panel").classList.add("hidden");$("employees-panel").classList.add("hidden");$("messages-panel").classList.remove("hidden");
-  for(const id of ["tab-dispatch","tab-my-rides","tab-messages","tab-employees"])$(id).classList.toggle("active",id==="tab-messages");
+  $("dispatch-panel").classList.add("hidden");$("my-rides-panel").classList.add("hidden");$("employees-panel").classList.add("hidden");$("archive-panel").classList.add("hidden");$("messages-panel").classList.remove("hidden");
+  for(const id of ["tab-dispatch","tab-my-rides","tab-messages","tab-employees","tab-archive"])$(id).classList.toggle("active",id==="tab-messages");
   try{await loadChatDirectory();await loadChatMessages()}catch(e){chatNotice(e.message,true)}
   saveView();if(chatPoll)clearInterval(chatPoll);
   chatPoll=setInterval(()=>{if(token&&!$("messages-panel").classList.contains("hidden"))loadChatMessages()},8000);
@@ -1089,9 +1089,9 @@ $("employee-delete-button").addEventListener("click",async()=>{
 
 $("tab-employees").addEventListener("click",async()=>{
  if(!["admin","dispatcher"].includes(staffRole))return;
- for(const id of ["dispatch-panel","my-rides-panel","messages-panel"])$(id).classList.add("hidden");
+ for(const id of ["dispatch-panel","my-rides-panel","messages-panel","archive-panel"])$(id).classList.add("hidden");
  $("employees-panel").classList.remove("hidden");
- for(const id of ["tab-dispatch","tab-my-rides","tab-messages","tab-employees"])$(id).classList.toggle("active",id==="tab-employees");
+ for(const id of ["tab-dispatch","tab-my-rides","tab-messages","tab-employees","tab-archive"])$(id).classList.toggle("active",id==="tab-employees");
  if(chatPoll)clearInterval(chatPoll);chatPoll=null;
  saveView();
  try{await loadEmployees()}catch(e){employeeNotice(e.message,true)}if(staffRole==="admin")await loadEmployeeAudit()
