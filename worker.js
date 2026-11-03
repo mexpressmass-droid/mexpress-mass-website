@@ -149,7 +149,7 @@ async function employeeAdmin(request,env){
     if(["confirmed","assigned"].includes(ride.status))patch.status="assigned";
     const filters="id=eq."+encodeURIComponent(ride.id)+"&status=eq."+encodeURIComponent(ride.status)+"&updated_at=eq."+encodeURIComponent(ride.updated_at)+"&assigned_driver_id="+(ride.assigned_driver_id?"eq."+encodeURIComponent(ride.assigned_driver_id):"is.null")+"&archived_at=is.null";
     const response=await fetch(SUPABASE+"/rest/v1/trips?"+filters,{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(patch)});
-    if(!response.ok){console.error("Bulk assign failed",response.status,await response.text());return reply({error:"Bulk assignment stopped after "+updatedCount+" of "+body.ride_ids.length+" rides. Refresh to review.",count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds},502)}
+    if(!response.ok){console.error("Bulk assign failed",response.status);return reply({error:"Bulk assignment stopped after "+updatedCount+" of "+body.ride_ids.length+" rides. Refresh to review.",count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds},502)}
     const changed=await response.json();
     if(changed.length!==1)return reply({error:"A ride changed during bulk assignment. "+updatedCount+" of "+body.ride_ids.length+" rides were assigned. Refresh and review.",count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds},409);
     updatedCount++;
@@ -177,7 +177,7 @@ async function employeeAdmin(request,env){
    for(const ride of rides){
     const filters="id=eq."+encodeURIComponent(ride.id)+"&updated_at=eq."+encodeURIComponent(ride.updated_at)+"&status=eq."+encodeURIComponent(ride.status)+"&assigned_driver_id="+(ride.assigned_driver_id?"eq."+encodeURIComponent(ride.assigned_driver_id):"is.null")+"&archived_at=is.null";
     const response=await fetch(SUPABASE+"/rest/v1/trips?"+filters,{method:"PATCH",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(patch)});
-    if(!response.ok){console.error("Bulk status failed",response.status,await response.text());return reply({error:"Bulk status stopped after "+updatedCount+" of "+body.ride_ids.length+" rides. Refresh and review.",count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds},502)}
+    if(!response.ok){console.error("Bulk status failed",response.status);return reply({error:"Bulk status stopped after "+updatedCount+" of "+body.ride_ids.length+" rides. Refresh and review.",count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds},502)}
     const changed=await response.json();
     if(changed.length!==1)return reply({error:"A ride changed while applying bulk status. "+updatedCount+" of "+body.ride_ids.length+" rides were updated. Refresh and review.",count:updatedCount,requested:body.ride_ids.length,updated_ride_ids:updatedRideIds},409);
     updatedCount++;
@@ -295,7 +295,7 @@ async function employeeAdmin(request,env){
     return {passenger_name:"TEST — "+names[randomInt(names.length)]+" "+surnames[randomInt(surnames.length)],passenger_phone:"202-555-"+String(1000+i).padStart(4,"0"),pickup_address:"TEST ONLY — "+places[origin],dropoff_address:"TEST ONLY — "+places[destination],pickup_at:bostonTime(day,hour,minute),wheelchair_required:wheelchair,trip_type:"one_way",status:"pending",source:"dispatch",assigned_driver_id:null,price_cents:9288+randomInt(10)*750,notes:batchTag+" | "+instructions[randomInt(instructions.length)]+" | TEST DATA, NOT A REAL BOOKING"};
    });
    const inserted=await fetch(SUPABASE+"/rest/v1/trips",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(records)});
-   if(!inserted.ok){const details=await inserted.text();console.error("100 demo seed failed",inserted.status,details);return reply({error:"Unable to create 100 demo rides: "+details.slice(0,200)},502)}
+   if(!inserted.ok){console.error("100 demo seed failed",inserted.status);return reply({error:"Unable to create 100 demo rides"},502)}
    const created=await inserted.json();
    await logEmployeeEvent(env,user,staffRole,"seed_demo_100_rides",user.id,{count:created.length,tag:batchTag});
    return reply({success:true,count:created.length});
@@ -325,7 +325,7 @@ async function employeeAdmin(request,env){
     if(pair)records.push({...baseRide,pickup_address:"TEST ONLY — "+destination,dropoff_address:"TEST ONLY — "+origin,pickup_at:localBostonIso(day,returnTime),dropoff_at:localBostonIso(day,"00:00"),notes:tag+" | "+group+" | RETURN | "+instruction+" Return pickup: confirm passenger is ready at lobby or front desk. | TEST DATA, NOT A REAL BOOKING"});
    }
    const inserted=await fetch(SUPABASE+"/rest/v1/trips",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(records)});
-   if(!inserted.ok){const details=await inserted.text();console.error("50 demo seed failed",inserted.status,details);let parsed={};try{parsed=JSON.parse(details)}catch{}const reason=String(parsed.message||parsed.details||"Database rejected demo rides").slice(0,300);return reply({error:"Unable to create 50 demo rides: "+reason},502)}
+   if(!inserted.ok){console.error("50 demo seed failed",inserted.status);return reply({error:"Unable to create 50 demo rides"},502)}
    const created=await inserted.json();
    await logEmployeeEvent(env,user,staffRole,"seed_demo_50_rides",user.id,{count:created.length,tag});
    return reply({success:true,count:created.length,pairs:20,singles:10});
@@ -347,14 +347,14 @@ async function employeeAdmin(request,env){
     return {passenger_name:"DEMO Passenger "+String(i+1).padStart(2,"0"),passenger_phone:"000-000-0000",pickup_address:"TEST ONLY — "+pickup,dropoff_address:"TEST ONLY — "+dropoff,pickup_at:date+"T"+time+":00"+(date<"2026-11-01"?"-04:00":"-05:00"),wheelchair_required:i%3===0,trip_type:"one_way",status:"pending",source:"dispatch",assigned_driver_id:null,notes:tag+" — TEST DATA, NOT A REAL BOOKING",price_cents:9288+(i%4)*1000};
    });
    const inserted=await fetch(SUPABASE+"/rest/v1/trips",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(records)});
-   if(!inserted.ok){console.error("Demo seed failed",inserted.status,await inserted.text());return reply({error:"Unable to create demo rides"},502)}
+   if(!inserted.ok){console.error("Demo seed failed",inserted.status);return reply({error:"Unable to create demo rides"},502)}
    const created=await inserted.json();
    await logEmployeeEvent(env,user,staffRole,"seed_demo_rides",user.id,{count:created.length,tag});
    return reply({success:true,count:created.length});
   }
   if(body.action==="list_sfrt_imports"){
    const response=await fetch(SUPABASE+"/rest/v1/trips?select=*&source=eq.dispatch&internal_notes=like.SFRT%20Trip%20Num%3A%25&order=pickup_at.desc&limit=1000",{headers:serviceHeaders,cache:"no-store"});
-   if(!response.ok){console.error("SFRT import lookup failed",response.status,await response.text());return reply({error:"Unable to check imported rides"},502)}
+   if(!response.ok){console.error("SFRT import lookup failed",response.status);return reply({error:"Unable to check imported rides"},502)}
    const rides=await response.json();
    return reply({rides,count:rides.length});
   }
@@ -377,13 +377,13 @@ async function employeeAdmin(request,env){
    for(const ride of rides){
     const marker="SFRT Trip Num: "+ride.trip_num;
     const existing=await fetch(SUPABASE+"/rest/v1/trips?select=id&source=eq.dispatch&internal_notes=eq."+encodeURIComponent(marker)+"&limit=1",{headers:serviceHeaders});
-    if(!existing.ok){const detail=await existing.json().catch(()=>({}));console.error("SFRT duplicate lookup failed",existing.status,detail);results.failed.push({trip_num:ride.trip_num,error:"Duplicate check failed ("+existing.status+"): "+String(detail.message||detail.code||"Database error").slice(0,220)});continue}
+    if(!existing.ok){console.error("SFRT duplicate lookup failed",existing.status);results.failed.push({trip_num:ride.trip_num,error:"Duplicate check failed ("+existing.status+")"});continue}
     if((await existing.json()).length){results.skipped++;continue}
     const record={passenger_name:ride.passenger_name.trim(),passenger_phone:ride.passenger_phone.trim(),pickup_address:ride.pickup_address.trim(),dropoff_address:ride.dropoff_address.trim(),pickup_at:new Date(ride.pickup_at).toISOString(),dropoff_at:ride.dropoff_at?new Date(ride.dropoff_at).toISOString():null,price_cents:ride.price_cents,distance_miles:ride.miles,notes:ride.notes.trim()||null,internal_notes:marker,source:"dispatch",status:"confirmed",trip_type:"one_way",wheelchair_required:false,assigned_driver_id:null};
     const created=await fetch(SUPABASE+"/rest/v1/trips",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(record)});
-    if(!created.ok){const detail=await created.json().catch(()=>({}));console.error("SFRT import insert failed",created.status,detail);results.failed.push({trip_num:ride.trip_num,error:"Insert failed ("+created.status+"): "+String(detail.message||detail.code||"Database error").slice(0,220)});continue}
+    if(!created.ok){console.error("SFRT import insert failed",created.status);results.failed.push({trip_num:ride.trip_num,error:"Insert failed ("+created.status+")"});continue}
     const rows=await created.json();results.created++;results.created_trip_nums.push(ride.trip_num);
-    try{await logEmployeeEvent(env,user,staffRole,"import_sfrt_csv",rows[0]?.id||user.id,{ride_id:rows[0]?.id,trip_num:ride.trip_num,miles:ride.miles,fare_cents:ride.price_cents})}catch(logError){console.error("SFRT audit log failed",ride.trip_num,logError)}
+    try{await logEmployeeEvent(env,user,staffRole,"import_sfrt_csv",rows[0]?.id||user.id,{ride_id:rows[0]?.id,trip_num:ride.trip_num,miles:ride.miles,fare_cents:ride.price_cents})}catch(logError){console.error("SFRT audit log failed")}
    }
    return reply({success:results.failed.length===0,...results,error:results.failed.length?"SFRT "+results.failed[0].trip_num+": "+results.failed[0].error:undefined},200);
   }
@@ -402,7 +402,7 @@ async function employeeAdmin(request,env){
     record.status="assigned";
    }
    const created=await fetch(SUPABASE+"/rest/v1/trips",{method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json","Prefer":"return=representation"},body:JSON.stringify(record)});
-   if(!created.ok){console.error("Ride creation failed",created.status,await created.text());return reply({error:"Unable to create ride"},502)}
+   if(!created.ok){console.error("Ride creation failed",created.status);return reply({error:"Unable to create ride"},502)}
    const rides=await created.json();
    await logEmployeeEvent(env,user,staffRole,"create_ride",user.id,{source:"web",ride_id:rides[0]?.id,assigned_driver_id:record.assigned_driver_id||null});
    return reply({success:true,ride_id:rides[0]?.id},201);
