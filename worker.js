@@ -17,7 +17,9 @@ async function fetchJson(url, options) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const result = await fetch(url, { ...options, signal: controller.signal, redirect: 'error' });
+    const result = await fetch(url, { ...options, signal: controller.signal, redirect: 'manual' });
+    // Workers supports manual/follow, not the browser-only error redirect mode.
+    // Keep redirects unfollowed; the caller rejects every non-2xx result.
     let body;
     try { body = await result.json(); } catch { body = null; }
     return { ok: result.ok, status: result.status, body };
