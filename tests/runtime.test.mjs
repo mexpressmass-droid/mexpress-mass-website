@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+const require=createRequire(import.meta.url);
+const {Miniflare,convertV4MiniflareOptions}=require(process.env.MINIFLARE_MODULE||'miniflare');
+const mf=new Miniflare(convertV4MiniflareOptions({modules:true,cf:false,scriptPath:new URL('../worker.js',import.meta.url).pathname,compatibilityDate:'2026-10-29',bindings:{RESEND_API_KEY:'TEST',BOOKING_NOTIFICATION_FROM:'test@example.invalid',TURNSTILE_SECRET_KEY:'TEST'}}));
+test('actual Workers runtime rejects honeypot without upstream access',async()=>{const r=await mf.dispatchFetch('https://mexpress-mass.com/api/ride-request',{method:'POST',headers:{Origin:'https://mexpress-mass.com','Content-Type':'application/json'},body:JSON.stringify({website:'TEST ONLY'})});assert.equal(r.status,400);assert.equal((await r.json()).code,'FORM_CHECK');});
+test('actual Workers runtime rejects wrong origin',async()=>{const r=await mf.dispatchFetch('https://mexpress-mass.com/api/ride-request',{method:'POST',headers:{Origin:'https://evil.invalid','Content-Type':'application/json'},body:'{}'});assert.equal(r.status,403);});
+test('actual Workers runtime rejects missing fields',async()=>{const r=await mf.dispatchFetch('https://mexpress-mass.com/api/ride-request',{method:'POST',headers:{Origin:'https://mexpress-mass.com','Content-Type':'application/json'},body:'{}'});assert.equal(r.status,400);assert.equal((await r.json()).code,'FIELDS');});
+test.after(()=>mf.dispose());
