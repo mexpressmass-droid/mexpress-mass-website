@@ -4,7 +4,6 @@
   "main": "worker.js",
   "assets": {
     "directory": ".",
-    "binding": "ASSETS",
-    "exclude": ["worker.js", "wrangler.jsonc", ".git/**", "README*"]
+    "binding": "ASSETS"
   }
 }

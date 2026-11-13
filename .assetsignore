@@ -1,0 +1,10 @@
+.git
+.git/**
+.github/**
+worker.js
+wrangler.jsonc
+README*
+tests/**
+node_modules/**
+package*.json
+*.test.*
